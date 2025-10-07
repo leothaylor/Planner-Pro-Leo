@@ -193,6 +193,7 @@
       const [search, setSearch] = React.useState("");
       const [exportOpen, setExportOpen] = React.useState(false);
       const [saving, setSaving] = React.useState(false);
+const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
       const [dragged, setDragged] = React.useState(null);
       const [focus, setFocus] = React.useState(null);
 
@@ -212,9 +213,18 @@
         setTasks(raw ? JSON.parse(raw) : {});
       },[wKey]);
 
-      // salvar (debounce)
-      useDebouncedEffect(()=> { setSaving(true); localStorage.setItem(wKey, JSON.stringify(tasks)); setSaving(false); }, [wKey, tasks], 800);
-      useDebouncedEffect(()=> { localStorage.setItem(REC_KEY, JSON.stringify(recurring)); }, [recurring], 800);
+      // salvar (debounce) — pausado se modal aberto ou modo foco ativo
+useDebouncedEffect(() => {
+  if (dialog || focus) return; // pausa autosave durante edição/foco
+  setSaving(true);
+  localStorage.setItem(wKey, JSON.stringify(tasks));
+  setSaving(false);
+}, [wKey, tasks, dialog, focus], 800);
+
+useDebouncedEffect(() => {
+  if (dialog || focus) return; // idem
+  localStorage.setItem(REC_KEY, JSON.stringify(recurring));
+}, [recurring, dialog, focus], 800);
 
       // dias
       const days = React.useMemo(()=> Array.from({length:7}, (_,i)=> addDays(anchor,i)), [anchor]);
@@ -418,7 +428,13 @@
           {/* Header */}
           <header className={`sticky top-0 z-20 backdrop-blur ${themeClasses.headerBg} border-b ${themeClasses.headerBorder} shadow-xl`}>
             <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-auto">
+  <button onClick={()=> setHeaderCollapsed(v=>!v)}
+          className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}
+          title={headerCollapsed ? "Mostrar métricas" : "Ocultar métricas"}>
+    <span className="material-icons-round text-lg">{headerCollapsed ? 'open_in_full' : 'close_fullscreen'}</span>
+  </button>
+
                 <span className="material-icons-round text-2xl text-cyan-500">playlist_add_check</span>
                 <h1 className="text-xl font-bold tracking-tight text-cyan-400">Planner Pro</h1>
               </div>
@@ -457,7 +473,8 @@
             </div>
 
             {/* Stats + Busca */}
-            <div className="max-w-7xl mx-auto px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`max-w-7xl mx-auto px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-300
+  ${headerCollapsed ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-[500px] opacity-100'}`}>
               <div className={`rounded-xl border ${themeClasses.headerBorder} ${themeClasses.cardBg} p-4 shadow-lg`}>
                 <div className="flex items-center gap-4">
                   <span className="material-icons-round text-3xl text-emerald-500">task_alt</span>
@@ -571,8 +588,10 @@
             <form onSubmit={submit} className="space-y-3">
               <label className="block text-sm">
                 <span className="text-slate-400">Título</span>
-                <input autoFocus value={form.title} onChange={e=> setForm(f=>({...f,title:e.target.value}))}
-                  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
+                <input autoFocus autoComplete="off" spellCheck={false}
+  value={form.title}
+  onChange={e=> setForm(f=>({...f,title:e.target.value}))}
+  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
               </label>
               <div className="grid grid-cols-2 gap-3">
                                 <label className="block text-sm">
@@ -747,4 +766,5 @@
   </script>
 </body>
 </html>
+
 
