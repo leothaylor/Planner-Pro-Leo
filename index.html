@@ -30,10 +30,8 @@
     :root { --ring: 0 255 255; }
     html { scroll-behavior: smooth }
     body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial }
-    /* focus visível */
     *:focus { outline: none }
     .focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(6, 182, 212, .55) }
-    /* trap visual para dialog */
     [aria-hidden="true"] { visibility: hidden }
   </style>
 </head>
@@ -193,7 +191,7 @@
       const [search, setSearch] = React.useState("");
       const [exportOpen, setExportOpen] = React.useState(false);
       const [saving, setSaving] = React.useState(false);
-const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
+      const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
       const [dragged, setDragged] = React.useState(null);
       const [focus, setFocus] = React.useState(null);
 
@@ -214,22 +212,22 @@ const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
       },[wKey]);
 
       // salvar (debounce) — pausado se modal aberto ou modo foco ativo
-useDebouncedEffect(() => {
-  if (dialog || focus) return; // pausa autosave durante edição/foco
-  setSaving(true);
-  localStorage.setItem(wKey, JSON.stringify(tasks));
-  setSaving(false);
-}, [wKey, tasks, dialog, focus], 800);
+      useDebouncedEffect(() => {
+        if (dialog || focus) return; // pausa autosave durante edição/foco
+        setSaving(true);
+        localStorage.setItem(wKey, JSON.stringify(tasks));
+        setSaving(false);
+      }, [wKey, tasks, dialog, focus], 800);
 
-useDebouncedEffect(() => {
-  if (dialog || focus) return; // idem
-  localStorage.setItem(REC_KEY, JSON.stringify(recurring));
-}, [recurring, dialog, focus], 800);
+      useDebouncedEffect(() => {
+        if (dialog || focus) return;
+        localStorage.setItem(REC_KEY, JSON.stringify(recurring));
+      }, [recurring, dialog, focus], 800);
 
       // dias
       const days = React.useMemo(()=> Array.from({length:7}, (_,i)=> addDays(anchor,i)), [anchor]);
 
-      // filtros / busca (ordena por prioridade->hora, depois filtra)
+      // filtros / busca
       const matches = (t, q) => {
         if(!q) return true;
         const hay = `${t.title} ${t.note||""} ${t.category||""}`.toLowerCase();
@@ -394,23 +392,29 @@ useDebouncedEffect(() => {
       };
       const dayCardWidth = "w-[90vw] sm:w-[50vw] lg:w-[40vw] xl:w-[25vw]";
 
-      // A11y: trap de foco simples para modal
+      // ===== Modal sem foco forçado + bloqueio de eventos globais =====
       const Modal = ({open, title, children, onClose}) => {
-        const first = React.useRef(null);
         React.useEffect(()=> {
-          if(open){ document.body.style.overflow='hidden'; setTimeout(()=> first.current?.focus(), 0); }
+          if(open) document.body.style.overflow='hidden';
           else document.body.style.overflow='';
           const onKey = (e)=> { if(e.key==='Escape' && open) onClose(); };
           window.addEventListener('keydown', onKey);
           return ()=> window.removeEventListener('keydown', onKey);
-        },[open]);
+        },[open, onClose]);
         if(!open) return null;
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            role="dialog" aria-modal="true" aria-labelledby="modal-title"
+            onKeyDownCapture={(e)=> e.stopPropagation()}
+            onKeyUpCapture={(e)=> e.stopPropagation()}
+          >
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-            <div className={`relative w-full max-w-lg mx-auto rounded-xl border border-cyan-500/40 ${themeClasses.cardBg} p-6 shadow-2xl shadow-cyan-900/40`}>
+            <div
+              className={`relative w-full max-w-lg mx-auto rounded-xl border border-cyan-500/40 ${themeClasses.cardBg} p-6 shadow-2xl shadow-cyan-900/40`}
+              onMouseDownCapture={(e)=> e.stopPropagation()}
+            >
               <h2 id="modal-title" className="text-xl font-bold text-cyan-400 mb-3">{title}</h2>
-              <button ref={first} className="sr-only">start</button>
               {children}
             </div>
           </div>
@@ -420,7 +424,7 @@ useDebouncedEffect(() => {
       return (
         <div className={`min-h-screen ${themeClasses.bg} ${themeClasses.text}`}>
           {saving && (
-            <div className="fixed top-0 right-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-cyan-600/70 text-white shadow-lg animate-pulse">
+            <div className="pointer-events-none fixed top-0 right-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-cyan-600/70 text-white shadow-lg animate-pulse">
               Salvando...
             </div>
           )}
@@ -429,11 +433,11 @@ useDebouncedEffect(() => {
           <header className={`sticky top-0 z-20 backdrop-blur ${themeClasses.headerBg} border-b ${themeClasses.headerBorder} shadow-xl`}>
             <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 ml-auto">
-  <button onClick={()=> setHeaderCollapsed(v=>!v)}
-          className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}
-          title={headerCollapsed ? "Mostrar métricas" : "Ocultar métricas"}>
-    <span className="material-icons-round text-lg">{headerCollapsed ? 'open_in_full' : 'close_fullscreen'}</span>
-  </button>
+                <button onClick={()=> setHeaderCollapsed(v=>!v)}
+                        className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}
+                        title={headerCollapsed ? "Mostrar métricas" : "Ocultar métricas"}>
+                  <span className="material-icons-round text-lg">{headerCollapsed ? 'open_in_full' : 'close_fullscreen'}</span>
+                </button>
 
                 <span className="material-icons-round text-2xl text-cyan-500">playlist_add_check</span>
                 <h1 className="text-xl font-bold tracking-tight text-cyan-400">Planner Pro</h1>
@@ -585,18 +589,25 @@ useDebouncedEffect(() => {
             dialog?.mode==="edit" ? "⚙️ Editar Tarefa" :
             dialog?.mode==="createRecurrence" ? "🔁 Novo Hábito Recorrente" : "➕ Adicionar Nova Tarefa"
           } onClose={()=> setDialog(null)}>
-            <form onSubmit={submit} className="space-y-3">
+            <form onSubmit={submit} className="space-y-3" onKeyDownCapture={(e)=> e.stopPropagation()}>
               <label className="block text-sm">
                 <span className="text-slate-400">Título</span>
-                <input autoFocus autoComplete="off" spellCheck={false}
-  value={form.title}
-  onChange={e=> setForm(f=>({...f,title:e.target.value}))}
-  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
+                <input
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  value={form.title}
+                  onChange={e=> setForm(f=>({...f,title:e.target.value}))}
+                  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
               </label>
+
               <div className="grid grid-cols-2 gap-3">
-                                <label className="block text-sm">
+                <label className="block text-sm">
                   <span className="text-slate-400">Hora (opcional)</span>
-                  <input value={form.time} onChange={e=> setForm(f=>({...f,time:e.target.value}))}
+                  <input
+                    autoComplete="off" spellCheck={false} inputMode="text"
+                    value={form.time} onChange={e=> setForm(f=>({...f,time:e.target.value}))}
                     placeholder="08:30 ou texto livre"
                     className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
                 </label>
@@ -625,8 +636,10 @@ useDebouncedEffect(() => {
 
               <label className="block text-sm">
                 <span className="text-slate-400">Nota (opcional)</span>
-                <textarea value={form.note} onChange={e=> setForm(f=>({...f,note:e.target.value}))}
+                <textarea
+                  autoComplete="off" spellCheck={false}
                   rows={3}
+                  value={form.note} onChange={e=> setForm(f=>({...f,note:e.target.value}))}
                   className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
               </label>
 
@@ -766,5 +779,3 @@ useDebouncedEffect(() => {
   </script>
 </body>
 </html>
-
-
