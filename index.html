@@ -3,529 +3,748 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Planner Pro — Guia de Implementação MVP</title>
-  <meta name="description" content="Documentação viva do Planner Semanal (MVP) — passos cirúrgicos, S&R, PWA e deploy no GitHub Pages." />
+  <title>Planner Pro — Semana</title>
+  <meta name="description" content="Planner semanal com agenda, checklist, Pomodoro, exportação e tema dark/light." />
+  <meta name="theme-color" content="#06b6d4" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+
+  <!-- Inter + Material Icons Round -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#06b6d4">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+
+  <!-- React 18 (UMD) + Babel para JSX inline -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
   <style>
-    :root { --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --info:#06b6d4; }
+    :root { --ring: 0 255 255; }
     html { scroll-behavior: smooth }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji"; }
-    .chips span{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .5rem;border-radius:.65rem;font-size:.75rem;border:1px solid rgb(148 163 184/.35)}
-    .copy-btn{position:absolute;top:.5rem;right:.5rem;font-size:.75rem;padding:.25rem .5rem;border-radius:.5rem;border:1px solid rgb(148 163 184/.35)}
-    pre{position:relative}
-    .k{color:#93c5fd}.fn{color:#fca5a5}.cmt{color:#94a3b8;font-style:italic}
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial }
+    /* focus visível */
+    *:focus { outline: none }
+    .focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(6, 182, 212, .55) }
+    /* trap visual para dialog */
+    [aria-hidden="true"] { visibility: hidden }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
-  <header class="border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur bg-slate-950/85">
-    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-      <div class="text-2xl font-extrabold text-cyan-400">Planner Pro</div>
-      <div class="text-sm text-slate-400">Guia de Implementação MVP • v1</div>
-      <div class="ml-auto chips">
-        <span class="bg-emerald-500/10 text-emerald-300 border-emerald-500/30">🟢 Incremental</span>
-        <span class="bg-cyan-500/10 text-cyan-300 border-cyan-500/30">⚙️ S&R cirúrgico</span>
-        <span class="bg-violet-500/10 text-violet-300 border-violet-500/30">📦 PWA pronto</span>
-      </div>
-    </div>
-  </header>
+  <div id="root"></div>
 
-  <main class="max-w-6xl mx-auto px-4 py-8">
-    <!-- SUMÁRIO -->
-    <nav class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#como-usar">0. Como usar</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#estado">1. Estado atual</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#decisoes">2. Decisões</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#passo-a-passo">3. Passo a passo (8 blocos)</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#pwa-deploy">4. PWA & Deploy</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#estrutura">5. Estrutura de pastas</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#testes">6. Testes mínimos</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#matriz">7. Matriz de decisão</a>
-      <a class="block p-4 rounded-xl border border-slate-800 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition" href="#roadmap">8. Roadmap (7 dias)</a>
-    </nav>
+  <script type="text/babel">
+    // ===== Utils de data (TZ-safe) =====
+    const startOfWeek = (d) => {
+      const date = new Date(d);
+      const day = (date.getDay() + 6) % 7; // segunda=0
+      const res = new Date(date);
+      res.setDate(date.getDate() - day);
+      res.setHours(0,0,0,0);
+      return res;
+    };
+    const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
 
-    <!-- 0. COMO USAR -->
-    <section id="como-usar" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">0) Como usar este documento</h2>
-      <ol class="list-decimal pl-5 space-y-2 text-slate-300">
-        <li>Este arquivo é sua <strong>fonte única de verdade</strong> para o MVP. Atualize aqui cada mudança.</li>
-        <li>Implemente as seções do <a href="#passo-a-passo" class="text-cyan-400 underline">Passo a Passo</a> em ordem.</li>
-        <li>Quando pedir “Search → Replace”, abra o seu arquivo do app e aplique exatamente como está.</li>
-        <li>Depois, siga <a href="#pwa-deploy" class="text-cyan-400 underline">PWA & Deploy</a> para publicar no GitHub Pages.</li>
-      </ol>
-    </section>
+    // ISO seguro (compensa fuso para não “virar o dia” ao salvar)
+    const fmtISO = (d) => {
+      const t = new Date(d);
+      t.setMinutes(t.getMinutes() - t.getTimezoneOffset());
+      return t.toISOString().slice(0,10);
+    };
+    const fmtHumano = (d) =>
+      d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
 
-    <!-- 1. ESTADO -->
-    <section id="estado" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">1) Estado atual do app (resumo)</h2>
-      <ul class="space-y-2 text-slate-300">
-        <li>✅ <span style="color:var(--ok)">Base sólida</span>: React + Tailwind; DnD HTML5; Pomodoro; tema dark/light.</li>
-        <li>🧠 Persistência semanal em <code>localStorage</code> com debounce.</li>
-        <li>🧩 Pontos a corrigir: <em>timezone/data</em>, <em>filtro de busca</em>, <em>recorrência idempotente</em>, <em>modais/a11y</em>, <em>exports</em>, <em>tema no &lt;html&gt;</em>, <em>beep</em>, <em>memo/debounce</em>.</li>
-      </ul>
-    </section>
+    // ===== Cores e Prioridade =====
+    const PRIORITY = {
+      high:   { text: "text-rose-500",   bar: "bg-rose-500",   ring: "ring-rose-500/50",   icon: "🔥" },
+      medium: { text: "text-amber-500",  bar: "bg-amber-500",  ring: "ring-amber-500/50",  icon: "🟡" },
+      low:    { text: "text-emerald-500",bar: "bg-emerald-500",ring: "ring-emerald-500/50",icon: "🟢" },
+    };
 
-    <!-- 2. DECISÕES -->
-    <section id="decisoes" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">2) Decisões de arquitetura (MVP)</h2>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div class="p-4 rounded-xl border border-slate-800">
-          <h3 class="font-semibold mb-2">Persistência</h3>
-          <ul class="text-slate-300 list-disc pl-5">
-            <li>Manter <strong>localStorage + versão de schema</strong> (rápido e suficiente).</li>
-            <li>Prever troca futura por IndexedDB via <code>StorageAdapter</code>.</li>
-          </ul>
-        </div>
-        <div class="p-4 rounded-xl border border-slate-800">
-          <h3 class="font-semibold mb-2">DnD</h3>
-          <ul class="text-slate-300 list-disc pl-5">
-            <li>HTML5 DnD por ora (desktop), migrar para <code>@dnd-kit</code> se mobile for prioridade.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- 3. PASSO A PASSO -->
-    <section id="passo-a-passo" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">3) Passo a passo cirúrgico (8 blocos) — com Search → Replace</h2>
-
-      <!-- 1) DATAS -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">1) Datas/TZ (corrige virada de dia) 🟢</h3>
-        <p class="text-slate-300 mb-2">Gera <code>YYYY-MM-DD</code> local e fixa <em>isToday</em>.</p>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Search:
-const fmtISO = (d) =&gt; d.toISOString().slice(0, 10);
-
-// Replace:
-const fmtISO = (d) =&gt; {
-  const x = new Date(d);
-  x.setHours(0,0,0,0);
-  const y = x.getFullYear();
-  const m = String(x.getMonth()+1).padStart(2,'0');
-  const dd = String(x.getDate()).padStart(2,'0');
-  return `${y}-${m}-${dd}`;
-};
-
-// Search:
-const isToday = fmtISO(d) === fmtISO(today);
-
-// Replace:
-const isToday = fmtISO(d) === fmtISO(new Date());
-</code></pre>
-      </article>
-
-      <!-- 2) BUSCA -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">2) Busca real + ordenação por hora 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Search (definição atual do filteredTasks):
-const filteredTasks = useMemo(() =&gt; {
-  // ...
-  return tasks;
-}, [tasks, search]);
-
-// Replace:
-const filteredTasks = useMemo(() =&gt; {
-  const q = search.trim().toLowerCase();
-  if (!q) return tasks;
-  const out = {};
-  for (const [date, arr] of Object.entries(tasks)) {
-    out[date] = (arr || [])
-      .filter(t =&gt; {
-        const hay = `${t.title ?? ''} ${t.note ?? ''} ${t.category ?? ''}`.toLowerCase();
-        return hay.includes(q);
-      })
-      .slice()
-      .sort((a,b) =&gt; ((a.time ?? '99:99') &gt; (b.time ?? '99:99') ? 1 : -1));
-  }
-  return out;
-}, [tasks, search]);
-</code></pre>
-      </article>
-
-      <!-- 3) RECORRÊNCIA -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">3) Recorrência idempotente 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Search (useEffect de recorrência):
-useEffect(() =&gt; {
-  if (recurringTasks.length === 0) return;
-  setTasks(prevTasks =&gt; { return prevTasks; });
-}, [weekKey, recurringTasks]);
-
-// Replace:
-useEffect(() =&gt; {
-  if (recurringTasks.length === 0) return;
-  setTasks(prevTasks =&gt; {
-    const next = { ...prevTasks };
-    // garante arrays da semana ancorada
-    for (let i = 0; i &lt; 7; i++) {
-      const d = addDays(anchor, i);
-      const dateStr = fmtISO(d);
-      next[dateStr] = next[dateStr] ? [...next[dateStr]] : [];
+    const CATEGORIES = [
+      "Treino – Peito","Treino – Costas","Treino – Pernas","Treino – Ombros","Treino – Bíceps","Treino – Tríceps","Cardio",
+      "Alongamento","Mobilidade","Medicação","Consulta","Exame","Sono/Rotina",
+      "Estudo – ENEM","Estudo – Medicina","Leitura Técnica","Revisão/Flashcards","Projeto 60",
+      "Trabalho – ACS","Trabalho – Barbeiro","Gravar Vídeo (Sora/Veo)","Edição Vídeo","Roteiro","Design/Canva",
+      "Financeiro","Doméstico","Compras","Administração","Deslocamento","Social/Lazer",
+    ];
+    const CAT_COLORS = {
+      "Treino – Peito":"emerald","Treino – Costas":"emerald","Treino – Pernas":"emerald","Treino – Ombros":"emerald","Treino – Bíceps":"emerald","Treino – Tríceps":"emerald",
+      "Cardio":"sky","Alongamento":"teal","Mobilidade":"teal",
+      "Medicação":"rose","Consulta":"rose","Exame":"rose","Sono/Rotina":"slate",
+      "Estudo – ENEM":"violet","Estudo – Medicina":"violet","Leitura Técnica":"indigo","Revisão/Flashcards":"indigo","Projeto 60":"cyan",
+      "Trabalho – ACS":"amber","Trabalho – Barbeiro":"amber","Gravar Vídeo (Sora/Veo)":"fuchsia","Edição Vídeo":"fuchsia","Roteiro":"fuchsia","Design/Canva":"pink",
+      "Financeiro":"lime","Doméstico":"orange","Compras":"orange","Administração":"yellow","Deslocamento":"blue","Social/Lazer":"green",
+    };
+    function colorClass(cat) {
+      const c = CAT_COLORS[cat] || "slate";
+      const map = {
+        emerald:{ ring:"ring-emerald-400/50",border:"border-emerald-400/50",bg:"bg-emerald-500/10",text:"text-emerald-500",bar:"bg-emerald-500",pill:"bg-emerald-500/20 text-emerald-700 border-emerald-400/30" },
+        sky:{ ring:"ring-sky-400/50",border:"border-sky-400/50",bg:"bg-sky-500/10",text:"text-sky-500",bar:"bg-sky-500",pill:"bg-sky-500/20 text-sky-700 border-sky-400/30" },
+        teal:{ ring:"ring-teal-400/50",border:"border-teal-400/50",bg:"bg-teal-500/10",text:"text-teal-500",bar:"bg-teal-500",pill:"bg-teal-500/20 text-teal-700 border-teal-400/30" },
+        rose:{ ring:"ring-rose-400/50",border:"border-rose-400/50",bg:"bg-rose-500/10",text:"text-rose-500",bar:"bg-rose-500",pill:"bg-rose-500/20 text-rose-700 border-rose-400/30" },
+        slate:{ ring:"ring-slate-400/50",border:"border-slate-400/50",bg:"bg-slate-500/10",text:"text-slate-500",bar:"bg-slate-500",pill:"bg-slate-500/20 text-slate-700 border-slate-400/30" },
+        violet:{ ring:"ring-violet-400/50",border:"border-violet-400/50",bg:"bg-violet-500/10",text:"text-violet-500",bar:"bg-violet-500",pill:"bg-violet-500/20 text-violet-700 border-violet-400/30" },
+        indigo:{ ring:"ring-indigo-400/50",border:"border-indigo-400/50",bg:"bg-indigo-500/10",text:"text-indigo-500",bar:"bg-indigo-500",pill:"bg-indigo-500/20 text-indigo-700 border-indigo-400/30" },
+        cyan:{ ring:"ring-cyan-400/50",border:"border-cyan-400/50",bg:"bg-cyan-500/10",text:"text-cyan-500",bar:"bg-cyan-500",pill:"bg-cyan-500/20 text-cyan-700 border-cyan-400/30" },
+        amber:{ ring:"ring-amber-400/50",border:"border-amber-400/50",bg:"bg-amber-500/10",text:"text-amber-500",bar:"bg-amber-500",pill:"bg-amber-500/20 text-amber-700 border-amber-400/30" },
+        fuchsia:{ ring:"ring-fuchsia-400/50",border:"border-fuchsia-400/50",bg:"bg-fuchsia-500/10",text:"text-fuchsia-500",bar:"bg-fuchsia-500",pill:"bg-fuchsia-500/20 text-fuchsia-700 border-fuchsia-400/30" },
+        pink:{ ring:"ring-pink-400/50",border:"border-pink-400/50",bg:"bg-pink-500/10",text:"text-pink-500",bar:"bg-pink-500",pill:"bg-pink-500/20 text-pink-700 border-pink-400/30" },
+        lime:{ ring:"ring-lime-400/50",border:"border-lime-400/50",bg:"bg-lime-500/10",text:"text-lime-500",bar:"bg-lime-500",pill:"bg-lime-500/20 text-lime-700 border-lime-400/30" },
+        orange:{ ring:"ring-orange-400/50",border:"border-orange-400/50",bg:"bg-orange-500/10",text:"text-orange-500",bar:"bg-orange-500",pill:"bg-orange-500/20 text-orange-700 border-orange-400/30" },
+        yellow:{ ring:"ring-yellow-400/50",border:"border-yellow-400/50",bg:"bg-yellow-500/10",text:"text-yellow-500",bar:"bg-yellow-500",pill:"bg-yellow-500/20 text-yellow-700 border-yellow-400/30" },
+        blue:{ ring:"ring-blue-400/50",border:"border-blue-400/50",bg:"bg-blue-500/10",text:"text-blue-500",bar:"bg-blue-500",pill:"bg-blue-500/20 text-blue-700 border-blue-400/30" },
+        green:{ ring:"ring-green-400/50",border:"border-green-400/50",bg:"bg-green-500/10",text:"text-green-500",bar:"bg-green-500",pill:"bg-green-500/20 text-green-700 border-green-400/30" },
+      };
+      return map[c] || map.slate;
     }
-    // gera instâncias sem duplicar
-    for (const rt of recurringTasks) {
-      for (let i = 0; i &lt; 7; i++) {
-        const d = addDays(anchor, i);
-        const wd = (d.getDay() + 6) % 7; // Seg=0
-        if (rt.recurrenceDays?.includes(wd)) {
-          const dateStr = fmtISO(d);
-          const exists = (next[dateStr]||[]).some(t =&gt;
-            t.isRecurring &amp;&amp; t.title===rt.title &amp;&amp; t.time===rt.time &amp;&amp; t.category===rt.category
-          );
-          if (!exists) {
-            next[dateStr].push({
-              id: `r_${rt.id}_${dateStr}`,
-              title: rt.title, time: rt.time, note: rt.note, category: rt.category,
-              priority: rt.priority ?? 'medium', done:false, isRecurring:true
+
+    // ===== Beep Pomodoro (Web Audio — latência baixa) =====
+    const beep = () => {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      try {
+        const ctx = new Ctx();
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = 880;
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.18, ctx.currentTime);
+        o.start(); o.stop(ctx.currentTime + 0.15);
+      } catch(e) { /* silencioso */ }
+    };
+
+    // ===== Snackbar =====
+    function useSnackbar() {
+      const [msg, setMsg] = React.useState(null);
+      const show = (text, ms = 2400) => { setMsg(text); setTimeout(()=>setMsg(null), ms); };
+      const Snackbar = () => msg ? (
+        <div role="status" aria-live="polite"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-full bg-slate-900/90 text-slate-100 border border-slate-700 shadow-2xl">
+          {msg}
+        </div>
+      ) : null;
+      return { show, Snackbar };
+    }
+
+    // ===== Pomodoro =====
+    const POMODORO = { work:25*60, shortBreak:5*60, longBreak:15*60 };
+    function usePomodoroTimer() {
+      const [status, setStatus] = React.useState('stopped'); // 'running','paused','finished'
+      const [mode, setMode] = React.useState('work');        // 'work','shortBreak','longBreak'
+      const [time, setTime] = React.useState(POMODORO.work);
+      const ref = React.useRef(null);
+
+      const start = React.useCallback(()=> setStatus('running'),[]);
+      const pause = React.useCallback(()=> setStatus('paused'),[]);
+      const reset = React.useCallback(()=>{ setStatus('stopped'); setMode('work'); setTime(POMODORO.work); },[]);
+      const setCustom = React.useCallback((m)=>{ if(POMODORO[m]) { setMode(m); setTime(POMODORO[m]); setStatus('stopped'); }},[]);
+
+      React.useEffect(()=>{
+        if(status==='running') {
+          ref.current = setInterval(()=>{
+            setTime(prev=>{
+              if(prev<=1){ clearInterval(ref.current); setStatus('finished'); beep(); return 0; }
+              return prev-1;
             });
+          },1000);
+        } else if(ref.current) { clearInterval(ref.current); }
+        return ()=> clearInterval(ref.current);
+      },[status]);
+
+      const fmt = (s)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+      return { time, formatted: fmt(time), status, mode, start, pause, reset, setCustom };
+    }
+
+    // ===== Persistência (schema v1 + debounce) =====
+    const SCHEMA = 1;
+    const weekKey = (anchor)=> `planner-week:${fmtISO(anchor)}?v=${SCHEMA}`;
+    const SETTINGS_KEY = `planner-settings?v=${SCHEMA}`;
+    const REC_KEY = `planner-recurring-tasks?v=${SCHEMA}`;
+
+    const useDebouncedEffect = (fn, deps, ms=800) => {
+      React.useEffect(()=>{
+        const t = setTimeout(()=>fn(), ms);
+        return ()=> clearTimeout(t);
+      }, deps);
+    };
+
+    // ===== App =====
+    function App(){
+      const [today] = React.useState(()=>new Date());
+      const [anchor, setAnchor] = React.useState(()=> startOfWeek(new Date()));
+      const [theme, setTheme] = React.useState(()=> (localStorage.getItem(SETTINGS_KEY) ? JSON.parse(localStorage.getItem(SETTINGS_KEY)).theme : 'dark'));
+      const [tasks, setTasks] = React.useState(()=> {
+        const raw = localStorage.getItem(weekKey(startOfWeek(new Date())));
+        return raw ? JSON.parse(raw) : {};
+      });
+      const [recurring, setRecurring] = React.useState(()=> {
+        const raw = localStorage.getItem(REC_KEY);
+        return raw ? JSON.parse(raw) : [];
+      });
+
+      const [dialog, setDialog] = React.useState(null);
+      const [form, setForm] = React.useState({ title:"", time:"", note:"", category:"", isRecurring:false, recurrenceDays:[], priority:'medium' });
+      const [search, setSearch] = React.useState("");
+      const [exportOpen, setExportOpen] = React.useState(false);
+      const [saving, setSaving] = React.useState(false);
+      const [dragged, setDragged] = React.useState(null);
+      const [focus, setFocus] = React.useState(null);
+
+      const { show:toast, Snackbar } = useSnackbar();
+      const pomodoro = usePomodoroTimer();
+
+      // tema
+      React.useEffect(()=>{
+        document.documentElement.classList.toggle('dark', theme==='dark');
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ theme, _schema:SCHEMA }));
+      },[theme]);
+
+      // semana atual -> carrega
+      const wKey = React.useMemo(()=> weekKey(anchor), [anchor]);
+      React.useEffect(()=>{
+        const raw = localStorage.getItem(wKey);
+        setTasks(raw ? JSON.parse(raw) : {});
+      },[wKey]);
+
+      // salvar (debounce)
+      useDebouncedEffect(()=> { setSaving(true); localStorage.setItem(wKey, JSON.stringify(tasks)); setSaving(false); }, [wKey, tasks], 800);
+      useDebouncedEffect(()=> { localStorage.setItem(REC_KEY, JSON.stringify(recurring)); }, [recurring], 800);
+
+      // dias
+      const days = React.useMemo(()=> Array.from({length:7}, (_,i)=> addDays(anchor,i)), [anchor]);
+
+      // filtros / busca (ordena por prioridade->hora, depois filtra)
+      const matches = (t, q) => {
+        if(!q) return true;
+        const hay = `${t.title} ${t.note||""} ${t.category||""}`.toLowerCase();
+        return hay.includes(q.toLowerCase());
+      };
+      const prioRank = { high:0, medium:1, low:2 };
+      const sortTasks = (arr=[]) =>
+        arr.slice().sort((a,b)=> (prioRank[a.priority||'medium'] - prioRank[b.priority||'medium']) ||
+          String(a.time||'').localeCompare(String(b.time||'')));
+
+      const filtered = React.useMemo(()=>{
+        const out = {};
+        for(const k of Object.keys(tasks)){
+          out[k] = sortTasks(tasks[k]).filter(t=>matches(t,search));
+        }
+        return out;
+      },[tasks, search]);
+
+      // métricas
+      const stats = React.useMemo(()=>{
+        let total=0, done=0;
+        for(const arr of Object.values(tasks)) for(const t of (arr||[])){ total++; if(t.done) done++; }
+        return { total, done, pct: total? Math.round(done/total*100):0 };
+      },[tasks]);
+
+      // CRUD
+      const addTask = (dateStr, t) => setTasks(prev=> ({ ...prev, [dateStr]: [ ...(prev[dateStr]||[]), t ] }));
+      const updateTask = (dateStr, id, partial) => setTasks(prev=> ({ ...prev, [dateStr]: (prev[dateStr]||[]).map(x=> x.id===id? {...x, ...partial}: x ) }));
+      const toggleTask = (dateStr, id) => setTasks(prev=> ({ ...prev, [dateStr]: (prev[dateStr]||[]).map(x=> x.id===id? {...x, done:!x.done}: x ) }));
+      const removeTask = (dateStr, id) => setTasks(prev=> ({ ...prev, [dateStr]: (prev[dateStr]||[]).filter(x=> x.id!==id ) }));
+
+      // DnD
+      const onDragStart = (e, date, id, index) => { setDragged({ date, id, index }); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", id); };
+      const onDragOver = (e)=> { e.preventDefault(); if(dragged) e.dataTransfer.dropEffect="move"; };
+      const onDragEnd = ()=> setDragged(null);
+      const onDrop = (e, targetDate, targetIndex) => {
+        e.preventDefault();
+        if(!dragged){ setDragged(null); return; }
+        setTasks(prev=>{
+          const {date:srcDate, id:mid } = dragged;
+          const src = [...(prev[srcDate]||[])];
+          const si = src.findIndex(t=>t.id===mid);
+          if(si===-1) return prev;
+          const [moved] = src.splice(si,1);
+          let tgt = srcDate===targetDate? src : [...(prev[targetDate]||[])];
+          tgt.splice(targetIndex,0,moved);
+          const nt = {...prev};
+          nt[srcDate] = src;
+          nt[targetDate] = tgt;
+          if(nt[srcDate] && nt[srcDate].length===0) delete nt[srcDate];
+          return nt;
+        });
+        setDragged(null);
+      };
+
+      // Modais
+      const openCreate = (dayDate)=> {
+        setForm({ title:"", time:"", note:"", category:"", isRecurring:false, recurrenceDays:[(dayDate.getDay()+6)%7], priority:'medium' });
+        setDialog({ date: fmtISO(dayDate), mode: "create" });
+      };
+      const openEdit = (dayISO, task)=> {
+        setForm({ title: task.title||"", time: task.time||"", note: task.note||"", category: task.category||"", priority: task.priority||'medium', isRecurring:false, recurrenceDays:[] });
+        setDialog({ date: dayISO, mode:"edit", id:task.id, isRecurringInstance: task.isRecurring });
+      };
+      const openRecurrence = ()=> {
+        setForm({ title:"", time:"", note:"", category:"", isRecurring:true, recurrenceDays:[(days[0].getDay()+6)%7], priority:'medium' });
+        setDialog({ date: fmtISO(days[0]), mode:"createRecurrence" });
+      };
+
+      const submit = (e)=> {
+        e?.preventDefault?.();
+        if(!dialog || !form.title.trim()) return;
+        const { title, time, note, category, priority, recurrenceDays } = form;
+
+        if(dialog.mode==="create"){
+          const id = Math.random().toString(36).slice(2,9);
+          addTask(dialog.date, { id, title: title.trim(), time, note, category, priority, done:false });
+        } else if(dialog.mode==="createRecurrence"){
+          if(!recurrenceDays.length){ toast("Selecione ao menos um dia."); return; }
+          const id = Math.random().toString(36).slice(2,9);
+          setRecurring(prev=> [...prev, { id, title:title.trim(), time, note, category, recurrenceDays, priority, isMaster:true }]);
+          toast("Hábito recorrente criado.");
+        } else if(dialog.mode==="edit" && dialog.id){
+          updateTask(dialog.date, dialog.id, { title:title.trim(), time, note, category, priority });
+          toast("Tarefa atualizada.");
+        }
+        setDialog(null);
+      };
+
+      // Export/Import
+      const doExportJSON = () => {
+        const payload = { version:SCHEMA, weekISO: fmtISO(anchor), tasks, recurring };
+        const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `planner-${fmtISO(anchor)}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+        toast("Backup JSON salvo.");
+      };
+      const doExportMarkdown = () => {
+        const lines = [];
+        lines.push(`# Semana ${fmtISO(anchor)}`);
+        for(const d of days){
+          const iso = fmtISO(d);
+          const arr = (tasks[iso]||[]);
+          lines.push(`\n## ${fmtHumano(d)} (${iso})`);
+          for(const t of sortTasks(arr)){
+            lines.push(`- ${t.done?"[x]":"[ ]"} ${t.time? t.time+" ":""}${t.title} ${t.priority? `(prio: ${t.priority})`:""} ${t.category? `(cat: ${t.category})`:""}`);
           }
         }
-      }
+        const blob = new Blob([lines.join("\n")],{type:"text/markdown"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `planner-${fmtISO(anchor)}.md`;
+        a.click(); URL.revokeObjectURL(a.href);
+        toast("Diário Markdown exportado.");
+      };
+      const doExportCSV = () => {
+        const header = ["date","title","priority","category","time","done","note"];
+        const rows = [header.join(",")];
+        for(const d of days){
+          const iso=fmtISO(d);
+          for(const t of (tasks[iso]||[])){
+            const r = [iso, JSON.stringify(t.title), t.priority||"", t.category||"", t.time||"", t.done, JSON.stringify(t.note||"")];
+            rows.push(r.join(","));
+          }
+        }
+        const blob = new Blob([rows.join("\n")],{type:"text/csv"});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+        toast("CSV exportado.");
+      };
+      const onImportFile = async (ev) => {
+        const f = ev.target.files?.[0]; if(!f) return;
+        const text = await f.text();
+        try{
+          const data = JSON.parse(text);
+          if(!data || typeof data!=='object') throw new Error();
+          if(data.tasks) setTasks(data.tasks);
+          if(data.recurring) setRecurring(data.recurring);
+          toast("Dados importados.");
+        }catch(e){ toast("Arquivo inválido."); }
+        ev.target.value = "";
+      };
+
+      // Focus Mode
+      const startFocus = (date, id) => {
+        const t = (tasks[date]||[]).find(x=>x.id===id);
+        if(t){ setFocus({ date, id, task:t }); pomodoro.reset(); }
+      };
+
+      // UI helpers
+      const themeClasses = theme==='dark' ? {
+        bg:"bg-slate-950", text:"text-slate-100", headerBg:"bg-slate-950/90", headerBorder:"border-slate-800",
+        cardBg:"bg-slate-900", cardBorder:"border-slate-700", cardHover:"hover:border-slate-600",
+        itemBg:"bg-slate-800/80", itemHover:"hover:bg-slate-800", neutral:"text-slate-400",
+        inputBg:"bg-slate-800", inputBorder:"border-slate-700", inputFocus:"focus:border-cyan-500",
+      } : {
+        bg:"bg-slate-50", text:"text-slate-900", headerBg:"bg-white/90", headerBorder:"border-slate-200",
+        cardBg:"bg-white", cardBorder:"border-slate-300", cardHover:"hover:border-slate-400",
+        itemBg:"bg-slate-100", itemHover:"hover:bg-slate-200", neutral:"text-slate-500",
+        inputBg:"bg-white", inputBorder:"border-slate-300", inputFocus:"focus:border-cyan-600",
+      };
+      const dayCardWidth = "w-[90vw] sm:w-[50vw] lg:w-[40vw] xl:w-[25vw]";
+
+      // A11y: trap de foco simples para modal
+      const Modal = ({open, title, children, onClose}) => {
+        const first = React.useRef(null);
+        React.useEffect(()=> {
+          if(open){ document.body.style.overflow='hidden'; setTimeout(()=> first.current?.focus(), 0); }
+          else document.body.style.overflow='';
+          const onKey = (e)=> { if(e.key==='Escape' && open) onClose(); };
+          window.addEventListener('keydown', onKey);
+          return ()=> window.removeEventListener('keydown', onKey);
+        },[open]);
+        if(!open) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+            <div className={`relative w-full max-w-lg mx-auto rounded-xl border border-cyan-500/40 ${themeClasses.cardBg} p-6 shadow-2xl shadow-cyan-900/40`}>
+              <h2 id="modal-title" className="text-xl font-bold text-cyan-400 mb-3">{title}</h2>
+              <button ref={first} className="sr-only">start</button>
+              {children}
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className={`min-h-screen ${themeClasses.bg} ${themeClasses.text}`}>
+          {saving && (
+            <div className="fixed top-0 right-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-cyan-600/70 text-white shadow-lg animate-pulse">
+              Salvando...
+            </div>
+          )}
+
+          {/* Header */}
+          <header className={`sticky top-0 z-20 backdrop-blur ${themeClasses.headerBg} border-b ${themeClasses.headerBorder} shadow-xl`}>
+            <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-2xl text-cyan-500">playlist_add_check</span>
+                <h1 className="text-xl font-bold tracking-tight text-cyan-400">Planner Pro</h1>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <button onClick={()=> setTheme(t=> t==='dark'?'light':'dark')}
+                        className={`p-2 rounded-lg text-sm border transition shadow-md ${theme==='dark'?'border-slate-700 bg-slate-800 hover:bg-slate-700':'border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700'} focus-ring`}
+                        title="Alternar tema">
+                  <span className="material-icons-round text-lg">{theme==='dark'?'light_mode':'dark_mode'}</span>
+                </button>
+
+                <button onClick={openRecurrence}
+                        className="px-3 py-1.5 rounded-lg text-sm border border-violet-600 bg-violet-800/30 text-violet-300 hover:bg-violet-800/40 transition shadow-md flex items-center gap-1 focus-ring"
+                        title="Criar hábito recorrente">
+                  <span className="material-icons-round text-base">repeat</span> Recorrência
+                </button>
+
+                <button onClick={()=> setExportOpen(true)}
+                        className="px-3 py-1.5 rounded-lg text-sm border border-emerald-600 bg-emerald-800/30 text-emerald-300 hover:bg-emerald-800/40 transition shadow-md flex items-center gap-1 focus-ring"
+                        title="Exportar / Importar">
+                  <span className="material-icons-round text-base">backup</span> Dados
+                </button>
+
+                <button onClick={()=> setAnchor(d=> addDays(d,-7))}
+                        className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}>
+                  <span className="material-icons-round text-lg">chevron_left</span>
+                </button>
+                <button onClick={()=> setAnchor(startOfWeek(new Date()))}
+                        className="px-3 py-1.5 rounded-lg text-sm border border-cyan-600 bg-cyan-800/30 text-cyan-300 hover:bg-cyan-800/40 transition shadow-md focus-ring">
+                  Hoje
+                </button>
+                <button onClick={()=> setAnchor(d=> addDays(d,7))}
+                        className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}>
+                  <span className="material-icons-round text-lg">chevron_right</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Stats + Busca */}
+            <div className="max-w-7xl mx-auto px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`rounded-xl border ${themeClasses.headerBorder} ${themeClasses.cardBg} p-4 shadow-lg`}>
+                <div className="flex items-center gap-4">
+                  <span className="material-icons-round text-3xl text-emerald-500">task_alt</span>
+                  <div>
+                    <div className="text-3xl font-extrabold text-emerald-500">{stats.done}</div>
+                    <div className={`text-xs ${themeClasses.neutral}`}>Concluídas das {stats.total}</div>
+                  </div>
+                </div>
+                <div className={`mt-2 text-[11px] ${themeClasses.neutral}`}>Semana: {fmtISO(addDays(anchor,0))} → {fmtISO(addDays(anchor,6))}</div>
+              </div>
+              <div className={`rounded-xl border ${themeClasses.headerBorder} ${themeClasses.cardBg} p-4 shadow-lg`}>
+                <div className="flex items-center gap-4">
+                  <span className="material-icons-round text-3xl text-amber-500">pending_actions</span>
+                  <div>
+                    <div className="text-3xl font-extrabold text-amber-500">{Math.max(stats.total-stats.done,0)}</div>
+                    <div className={`text-xs ${themeClasses.neutral}`}>Pendentes</div>
+                  </div>
+                </div>
+              </div>
+              <div className={`rounded-xl border ${themeClasses.headerBorder} ${themeClasses.cardBg} p-4 shadow-lg`}>
+                <label className={`text-xs ${themeClasses.neutral} block mb-1`} htmlFor="busca">🔍 Busca Rápida (Ctrl/Cmd + K)</label>
+                <input id="busca" value={search} onChange={(e)=> setSearch(e.target.value)}
+                       placeholder="Filtrar por título, nota ou categoria…"
+                       className={`w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none text-sm transition ${themeClasses.text}`} />
+                {search.trim() && <p className="text-xs mt-1 text-orange-500">Atenção: a busca desativa a ordem manual!</p>}
+              </div>
+            </div>
+          </header>
+
+          {/* Semana */}
+          <main className="max-w-7xl mx-auto px-4 py-8">
+            <h2 className="text-lg font-semibold mb-4">Agenda da Semana (arraste e solte)</h2>
+
+            <div className="flex overflow-x-scroll snap-x snap-mandatory pb-4 gap-4">
+              {days.map((d)=>{
+                const key = fmtISO(d);
+                const arr = filtered[key] || [];
+                const isToday = fmtISO(d)===fmtISO(today);
+                return (
+                  <section key={key}
+                    className={`${isToday? "border-cyan-500 bg-cyan-500/10 shadow-xl shadow-cyan-900/20":"border-slate-700"} relative rounded-xl border-2 p-4 min-h-[500px] flex flex-col transition-all duration-300 snap-center flex-shrink-0 ${themeClasses.cardBg} ${themeClasses.cardHover} ${dayCardWidth}`}
+                    onDragOver={onDragOver}
+                    onDrop={(e)=> onDrop(e, key, arr.length)}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="font-semibold">{fmtHumano(d)}</div>
+                      <div className="text-xs text-slate-400">{key}</div>
+                    </div>
+
+                    <div className="space-y-3 flex-grow overflow-y-auto pr-1">
+                      {arr.map((t, idx)=>{
+                        const cls = colorClass(t.category);
+                        const pri = PRIORITY[t.priority || 'medium'];
+                        const isDragging = dragged && dragged.id===t.id;
+                        const isFocus = focus && focus.id===t.id && focus.date===key;
+                        return (
+                          <article key={t.id}
+                            draggable
+                            onDragStart={(e)=> onDragStart(e,key,t.id,idx)}
+                            onDragOver={onDragOver}
+                            onDrop={(e)=> onDrop(e,key,idx)}
+                            onDragEnd={onDragEnd}
+                            className={`rounded-lg border ${pri.ring} ${themeClasses.itemBg} p-3 flex items-start gap-3 relative transition-all duration-200 cursor-grab
+                              ${t.done? "opacity-60": themeClasses.itemHover}
+                              ${isDragging? "ring-4 ring-cyan-500/50 opacity-30 cursor-grabbing": "hover:shadow-lg hover:shadow-cyan-900/10"}
+                              ${isFocus? "ring-4 ring-cyan-500/80 !opacity-100": ""}`}>
+                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg ${pri.bar}`} />
+                            <input type="checkbox" checked={t.done} onChange={()=> toggleTask(key,t.id)}
+                                   className="mt-0.5 h-4 w-4 accent-emerald-500 flex-shrink-0 cursor-pointer border-slate-600 transition-transform duration-300 active:scale-90"
+                                   aria-label="Concluir" />
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <div className={`text-sm break-words leading-tight ${t.done? "line-through text-slate-400 italic": ""}`}>
+                                {t.title}
+                                {t.isRecurring && <span className="ml-2 text-[10px] px-1 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/30">🔁 Hábito</span>}
+                              </div>
+                              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                {t.category && <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${cls.pill} whitespace-nowrap font-medium`}>{t.category}</span>}
+                                {t.time && <div className="text-[11px] text-slate-400 truncate min-w-0">🕒 {t.time}</div>}
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1 text-xs flex-shrink-0 ml-auto pt-0.5">
+                              <button onClick={()=> startFocus(key,t.id)} className="text-cyan-400 hover:text-cyan-300 transition" title="Modo Foco">
+                                <span className="material-icons-round text-lg">timer</span>
+                              </button>
+                              <button onClick={()=> openEdit(key,t)} className="text-cyan-300 hover:text-cyan-200 transition" title="Editar">
+                                <span className="material-icons-round text-lg">edit</span>
+                              </button>
+                              <button onClick={()=> removeTask(key,t.id)} className="text-rose-400 hover:text-rose-300 transition" title="Excluir">
+                                <span className="material-icons-round text-lg">delete</span>
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    <button onClick={()=> openCreate(d)}
+                      className={`mt-4 w-full text-center text-sm text-cyan-400 border-2 border-dashed ${themeClasses.cardBorder} hover:border-cyan-600/60 rounded-xl px-3 py-2 ${theme==='dark'?'bg-slate-900/50 hover:bg-slate-800':'bg-slate-50 hover:bg-slate-100'} transition flex items-center justify-center gap-1`}>
+                      <span className="material-icons-round text-base">add_box</span> Adicionar Tarefa (N)
+                    </button>
+                  </section>
+                );
+              })}
+            </div>
+          </main>
+
+          {/* Dialog criar/editar/recorrência */}
+          <Modal open={!!dialog} title={
+            dialog?.mode==="edit" ? "⚙️ Editar Tarefa" :
+            dialog?.mode==="createRecurrence" ? "🔁 Novo Hábito Recorrente" : "➕ Adicionar Nova Tarefa"
+          } onClose={()=> setDialog(null)}>
+            <form onSubmit={submit} className="space-y-3">
+              <label className="block text-sm">
+                <span className="text-slate-400">Título</span>
+                <input autoFocus value={form.title} onChange={e=> setForm(f=>({...f,title:e.target.value}))}
+                  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                                <label className="block text-sm">
+                  <span className="text-slate-400">Hora (opcional)</span>
+                  <input value={form.time} onChange={e=> setForm(f=>({...f,time:e.target.value}))}
+                    placeholder="08:30 ou texto livre"
+                    className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm">
+                  <span className="text-slate-400">Categoria</span>
+                  <select value={form.category} onChange={e=> setForm(f=>({...f,category:e.target.value}))}
+                    className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`}>
+                    <option value="">(sem categoria)</option>
+                    {CATEGORIES.map(c=> <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+
+                <label className="block text-sm">
+                  <span className="text-slate-400">Prioridade</span>
+                  <select value={form.priority} onChange={e=> setForm(f=>({...f,priority:e.target.value}))}
+                    className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`}>
+                    <option value="high">Alta</option>
+                    <option value="medium">Média</option>
+                    <option value="low">Baixa</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="block text-sm">
+                <span className="text-slate-400">Nota (opcional)</span>
+                <textarea value={form.note} onChange={e=> setForm(f=>({...f,note:e.target.value}))}
+                  rows={3}
+                  className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`} />
+              </label>
+
+              {/* Recorrência: só mostra no modo createRecurrence */}
+              {dialog?.mode==="createRecurrence" && (
+                <fieldset className="text-sm">
+                  <legend className="text-slate-400 mb-1">Dias da semana</legend>
+                  <div className="grid grid-cols-7 gap-2">
+                    {["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map((lbl, i)=>(
+                      <label key={lbl} className="flex items-center gap-2 p-2 rounded-lg border border-slate-700 hover:border-cyan-600/60 cursor-pointer">
+                        <input type="checkbox"
+                          checked={form.recurrenceDays.includes(i)}
+                          onChange={(e)=>{
+                            setForm(f=>{
+                              const has = f.recurrenceDays.includes(i);
+                              return {...f, recurrenceDays: has? f.recurrenceDays.filter(x=>x!==i) : [...f.recurrenceDays, i]};
+                            });
+                          }} />
+                        <span>{lbl}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={()=> setDialog(null)}
+                        className={`px-3 py-2 rounded-lg border ${themeClasses.inputBorder} ${themeClasses.inputBg} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition`}>
+                  Cancelar
+                </button>
+                <button type="submit"
+                        className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition">
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </Modal>
+
+          {/* Modal Export/Import */}
+          <Modal open={exportOpen} title="Backup e Exportação" onClose={()=> setExportOpen(false)}>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={doExportJSON} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition">Exportar JSON</button>
+                <label className="px-3 py-2 rounded-lg border border-slate-600 cursor-pointer text-center hover:border-cyan-600/60 transition">
+                  Importar JSON
+                  <input type="file" accept="application/json" onChange={onImportFile} className="hidden" />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={doExportMarkdown} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition">Exportar Markdown</button>
+                <button onClick={doExportCSV} className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold transition">Exportar CSV</button>
+              </div>
+            </div>
+          </Modal>
+
+          {/* Modo Foco + Pomodoro */}
+          {focus && (
+            <div className={`fixed inset-0 z-[60] flex items-center justify-center p-4 ${theme==='dark'?'bg-black/90':'bg-black/95'}`}>
+              <button onClick={()=> { setFocus(null); pomodoro.reset(); }}
+                      className="absolute top-4 right-4 text-white/80 hover:text-white transition text-xl font-bold"
+                      title="Sair do Modo Foco (Esc)">✕ Fechar</button>
+
+              <div className={`relative w-full max-w-3xl p-8 rounded-2xl shadow-2xl ${theme==='dark'?'bg-slate-800':'bg-white'} border-4 border-cyan-500`}>
+                <h3 className="text-2xl font-bold mb-4 text-cyan-500">Modo Foco / Pomodoro 🎯</h3>
+
+                <div className="text-center mb-8">
+                  <div className="flex justify-center gap-3 mb-4">
+                    {['work','shortBreak','longBreak'].map(m=>(
+                      <button key={m} onClick={()=> pomodoro.setCustom(m)}
+                        className={`px-4 py-2 rounded-full text-sm font-semibold transition ${pomodoro.mode===m? 'bg-cyan-600 text-white shadow-md' : `${themeClasses.inputBg} ${themeClasses.neutral} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'}`}`}>
+                        {m==='work'?'Foco (25m)': m==='shortBreak'?'Pausa Curta (5m)':'Pausa Longa (15m)'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-8xl font-extrabold text-cyan-500 mb-4">{pomodoro.formatted}</div>
+
+                  <div className="flex justify-center gap-4">
+                    {pomodoro.status==='running' ? (
+                      <button onClick={pomodoro.pause} className="px-6 py-3 rounded-xl text-lg font-bold bg-amber-600 text-white hover:bg-amber-700 transition shadow-lg flex items-center gap-2">
+                        <span className="material-icons-round">pause</span> Pausar
+                      </button>
+                    ) : (
+                      <button onClick={pomodoro.start} className="px-6 py-3 rounded-xl text-lg font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-lg flex items-center gap-2">
+                        <span className="material-icons-round">play_arrow</span> {pomodoro.status==='paused'?'Continuar':'Iniciar'}
+                      </button>
+                    )}
+                    <button onClick={pomodoro.reset} className={`px-4 py-2 rounded-xl text-md border ${themeClasses.inputBorder} ${themeClasses.inputBg} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition ${themeClasses.text} flex items-center gap-2`}>
+                      <span className="material-icons-round">restart_alt</span> Resetar
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-lg p-6 border-l-8 mb-6 mt-8 ${PRIORITY[focus.task.priority||'medium'].bar} ${themeClasses.itemBg} shadow-inner`}>
+                  <h4 className="text-3xl font-extrabold break-words mb-2">{focus.task.title}</h4>
+                  {focus.task.note && <p className={`${themeClasses.neutral} text-lg`}>{focus.task.note}</p>}
+                </div>
+
+                <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+                  <button onClick={()=> { toggleTask(focus.date, focus.id); setFocus(null); pomodoro.reset(); }}
+                          className="px-6 py-3 rounded-xl text-lg font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-lg">
+                    {focus.task.done ? "Desmarcar e Sair" : "✅ Concluir e Sair"}
+                  </button>
+                  <button onClick={()=> { setFocus(null); pomodoro.reset(); }}
+                          className={`px-4 py-2 rounded-xl text-md border ${themeClasses.inputBorder} ${themeClasses.inputBg} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition ${themeClasses.text}`}>
+                    Voltar à Agenda
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rodapé + Snackbar */}
+          <footer className="max-w-7xl mx-auto px-4 pb-6 mt-12 border-t border-slate-800/50">
+            <div className={`mt-6 text-center text-xs ${themeClasses.neutral}`}>
+              * Salvamento local (localStorage) com debounce de 0.8s. Pressione <kbd>Ctrl/Cmd + K</kbd> para focar a busca.
+            </div>
+          </footer>
+
+          <Snackbar />
+        </div>
+      );
     }
-    return next;
-  });
-}, [weekKey, recurringTasks, anchor]);
-</code></pre>
-      </article>
 
-      <!-- 4) MODAIS/A11Y -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">4) Modais acessíveis + ESC + bloquear scroll 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Add below (junto dos outros useEffect):
-useEffect(() =&gt; {
-  const anyOpen = !!(dialog || exportOpen || clearConfirmationOpen || focusModeTask);
-  if (anyOpen) {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () =&gt; { document.body.style.overflow = prev; };
-  }
-}, [dialog, exportOpen, clearConfirmationOpen, focusModeTask]);
+    // Montagem
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 
-// Search (container do modal de criar/editar):
-&lt;form onSubmit={handleSubmit} className="..."&gt;
-
-// Replace:
-&lt;form
-  onSubmit={handleSubmit}
-  role="dialog" aria-modal="true" tabIndex="-1"
-  onKeyDown={(e)=&gt;{ if(e.key==='Escape') setDialog(null); }}
-  className="..."
-&gt;
-</code></pre>
-        <p class="text-slate-400 text-sm mt-2">Repita a ideia para os outros modais (export, confirmação e foco).</p>
-      </article>
-
-      <!-- 5) EXPORTS -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">5) Export / Import / Markdown / CSV / TSV 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Replace handlers "stubados":
-
-function handleExportData() {
-  const payload = { version: 1, anchor: fmtISO(anchor), tasks, recurringTasks };
-  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `planner_${fmtISO(anchor)}.json`; a.click();
-  URL.revokeObjectURL(url);
-  showSnackbar("Backup JSON salvo no seu dispositivo.");
-}
-
-function handleFileChange(event) {
-  const file = event.target.files?.[0]; if (!file) return;
-  const r = new FileReader();
-  r.onload = () =&gt; {
-    try {
-      const data = JSON.parse(r.result);
-      if (data.tasks) setTasks(data.tasks);
-      if (data.recurringTasks) setRecurringTasks(data.recurringTasks);
-      showSnackbar("Dados importados com sucesso!");
-    } catch { showSnackbar("Falha ao importar JSON."); }
-  };
-  r.readAsText(file);
-}
-
-function exportToMarkdown() {
-  let md = `# Planner ${fmtISO(addDays(anchor,0))} → ${fmtISO(addDays(anchor,6))}\n\n`;
-  for (const d of days) {
-    const k = fmtISO(d);
-    md += `## ${fmtHumano(d)}\n`;
-    const arr = (tasks[k]||[]).slice().sort((a,b)=&gt;(a.time??'99:99')&gt;(b.time??'99:99')?1:-1);
-    for (const t of arr) {
-      md += `- ${t.done?'[x]':'[ ]'} ${t.time?`**${t.time}** — `:''}${t.title}${t.category?` _( ${t.category} )_`:''}${t.note?` — ${t.note}`:''}\n`;
-    }
-    md += '\n';
-  }
-  const blob = new Blob([md], {type:'text/markdown'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `planner_${fmtISO(anchor)}.md`; a.click();
-  URL.revokeObjectURL(url);
-  showSnackbar("Diário Markdown exportado.");
-}
-
-function toCSV(rows){ return rows.map(r=&gt;r.map(x=&gt;`"${String(x??'').replace(/"/g,'""')}"`).join(',')).join('\n'); }
-
-function downloadCSV(){
-  const rows = [["Data","Hora","Título","Categoria","Feito"]];
-  for (const d of days) {
-    const k = fmtISO(d);
-    for (const t of (tasks[k]||[])) rows.push([k, t.time||'', t.title||'', t.category||'', t.done?'1':'0']);
-  }
-  const blob = new Blob([toCSV(rows)], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `planner_${fmtISO(anchor)}.csv`; a.click();
-  URL.revokeObjectURL(url);
-  showSnackbar("Download CSV iniciado.");
-}
-
-async function copyTableAsTSV(){
-  const rows = [["Data","Hora","Título","Categoria","Feito"]];
-  for (const d of days) {
-    const k = fmtISO(d);
-    for (const t of (tasks[k]||[])) rows.push([k, t.time||'', t.title||'', t.category||'', t.done?'1':'0']);
-  }
-  const tsv = rows.map(r=&gt;r.join('\t')).join('\n');
-  await navigator.clipboard.writeText(tsv);
-  showSnackbar("Tabela copiada (TSV).");
-}
-</code></pre>
-      </article>
-
-      <!-- 6) TEMA -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">6) Tema sem sobrescrever &lt;html&gt; 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Search:
-document.documentElement.className = theme;
-
-// Replace:
-document.documentElement.classList.toggle('dark', theme === 'dark');
-</code></pre>
-      </article>
-
-      <!-- 7) BEEP -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">7) Beep do Pomodoro (Web Audio) 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Search (no hook pomodoro, quando termina):
-new Audio('data:audio/wav;base64,UklGRigaAEAAVV...').play();
-
-// Replace (beep robusto):
-try {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const o = ctx.createOscillator(); const g = ctx.createGain();
-  o.type = 'sine'; o.frequency.setValueAtTime(880, ctx.currentTime);
-  g.gain.setValueAtTime(0.0001, ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
-  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.26);
-} catch(e) { console.warn("Erro ao tocar beep.", e); }
-</code></pre>
-      </article>
-
-      <!-- 8) MEMO/DEBOUNCE -->
-      <article class="mb-8">
-        <h3 class="text-lg font-bold">8) Memo & Debounce suaves 🟢</h3>
-        <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>
-// Add below (utils):
-function useDebounce(value, delay = 200) {
-  const [deb, setDeb] = useState(value);
-  useEffect(() =&gt; { const h = setTimeout(() =&gt; setDeb(value), delay); return () =&gt; clearTimeout(h); }, [value, delay]);
-  return deb;
-}
-
-// Use:
-const debouncedSearch = useDebounce(search, 200);
-
-// Troque dependência do filteredTasks:
-// [tasks, search] -&gt; [tasks, debouncedSearch]
-// e dentro do memo use:
-const q = debouncedSearch.trim().toLowerCase();
-
-// (Opcional) Memo em StatsTiles:
-const StatsTiles = React.memo(function StatsTiles(props){ /* ... */ });
-</code></pre>
-      </article>
-
-      <!-- CHECKLIST -->
-      <div class="rounded-xl border border-slate-800 p-4">
-        <h4 class="font-semibold mb-2">Checklist de validação</h4>
-        <ul class="list-disc pl-5 text-slate-300 space-y-1">
-          <li>🟢 “Hoje” destaca corretamente.</li>
-          <li>🟢 Busca filtra e ordena por hora.</li>
-          <li>🟢 Recorrência não duplica instâncias.</li>
-          <li>🟢 Abrir modal: Esc fecha, sem scroll de fundo, <code>role="dialog"</code>.</li>
-          <li>🟢 Export JSON/MD/CSV, Copiar TSV funcionando.</li>
-          <li>🟢 Tema troca sem efeitos colaterais.</li>
-          <li>🟢 Beep toca no fim do Pomodoro.</li>
-          <li>🟢 Busca suave (debounce) e UI fluida.</li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- 4. PWA & DEPLOY -->
-    <section id="pwa-deploy" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">4) PWA & Deploy (GitHub Pages)</h2>
-      <div class="space-y-3 text-slate-300">
-        <p><strong>Arquivos adicionais</strong> (vamos criar depois, eu te guio):</p>
-        <ul class="list-disc pl-5">
-          <li><code>manifest.webmanifest</code> — nome/ícones/mode.</li>
-          <li><code>sw.js</code> — cache básico (assets estáticos) + <em>network-first</em> para HTML.</li>
-          <li><code>404.html</code> — fallback de SPA (GH Pages).</li>
-          <li><code>.nojekyll</code> — opcional (evita Jekyll).</li>
-        </ul>
-        <p class="mt-2"><strong>Roteiro GH Pages</strong>:</p>
-        <ol class="list-decimal pl-5 space-y-1">
-          <li>Coloque este <code>index.html</code> na raíz do repositório (ou em <code>docs/</code> e habilite Pages &gt; /docs).</li>
-          <li>Crie <code>404.html</code> simples redirecionando para <code>index.html</code> (SPA).</li>
-          <li>Ative GitHub Pages (Settings → Pages → Branch <em>main</em> / root).</li>
-          <li>Abra a URL pública e valide carregamento e navegação.</li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- 5. ESTRUTURA -->
-    <section id="estrutura" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">5) Estrutura de pastas sugerida</h2>
-      <pre class="bg-slate-900/70 p-4 rounded-lg border border-slate-800 overflow-x-auto"><button class="copy-btn" onclick="copyNext(this)">copiar</button><code>src/
-  features/
-    planner/        # DayColumn, TaskCard, lógica principal
-    pomodoro/       # usePomodoroTimer, beep
-    persistence/    # storageAdapter (localStorage v1 → IndexedDB depois)
-  shared/
-    hooks/          # useSnackbar, useDebounce, useTheme
-    ui/             # Modal base (a11y), Select materialish, Buttons
-    lib/            # fmtISO local (TZ-safe), recurrence, export helpers
-  pwa/
-    manifest.webmanifest
-    sw.js
-  tests/
-    unit/
-    e2e/
-</code></pre>
-    </section>
-
-    <!-- 6. TESTES -->
-    <section id="testes" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">6) Testes mínimos (sugestão)</h2>
-      <ul class="list-disc pl-5 text-slate-300 space-y-1">
-        <li><strong>lib/fmtISO</strong>: datas limítrofes (23:59 → 00:00) no fuso de SP.</li>
-        <li><strong>filteredTasks</strong>: filtra e ordena (com e sem horário).</li>
-        <li><strong>recurrence</strong>: idempotência (não duplica) e cobertura dos 7 dias.</li>
-        <li><strong>modal</strong>: Esc fecha; bloqueio de scroll; foco retorna ao gatilho.</li>
-      </ul>
-    </section>
-
-    <!-- 7. MATRIZ -->
-    <section id="matriz" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">7) Matriz de decisão (resumo)</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm border border-slate-800 rounded-lg">
-          <thead class="bg-slate-900/60">
-            <tr>
-              <th class="px-3 py-2 text-left">Opção</th>
-              <th class="px-3 py-2 text-left">DX</th>
-              <th class="px-3 py-2 text-left">Mobile</th>
-              <th class="px-3 py-2 text-left">Bundle</th>
-              <th class="px-3 py-2 text-left">Robustez</th>
-              <th class="px-3 py-2 text-left">Recomendação</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="border-t border-slate-800">
-              <td class="px-3 py-2">DnD HTML5</td>
-              <td class="px-3 py-2">Fácil</td>
-              <td class="px-3 py-2">⚠️ Inconsistente</td>
-              <td class="px-3 py-2">Nenhum</td>
-              <td class="px-3 py-2">Média</td>
-              <td class="px-3 py-2">MVP ok; migrar se mobile criticar</td>
-            </tr>
-            <tr class="border-t border-slate-800">
-              <td class="px-3 py-2">@dnd-kit</td>
-              <td class="px-3 py-2">Médio</td>
-              <td class="px-3 py-2">✅ Ótimo</td>
-              <td class="px-3 py-2">+15–30kB</td>
-              <td class="px-3 py-2">Alta</td>
-              <td class="px-3 py-2">Use na v2 se foco for mobile</td>
-            </tr>
-            <tr class="border-t border-slate-800">
-              <td class="px-3 py-2">localStorage</td>
-              <td class="px-3 py-2">Muito fácil</td>
-              <td class="px-3 py-2">—</td>
-              <td class="px-3 py-2">Nenhum</td>
-              <td class="px-3 py-2">Boa (MVP)</td>
-              <td class="px-3 py-2">Mantenha + versão schema</td>
-            </tr>
-            <tr class="border-t border-slate-800">
-              <td class="px-3 py-2">IndexedDB (idb-keyval)</td>
-              <td class="px-3 py-2">Médio</td>
-              <td class="px-3 py-2">—</td>
-              <td class="px-3 py-2">Pequeno</td>
-              <td class="px-3 py-2">Alta (escala)</td>
-              <td class="px-3 py-2">Planejar via StorageAdapter</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- 8. ROADMAP -->
-    <section id="roadmap" class="mb-12">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">8) Roadmap de execução (7 dias)</h2>
-      <ol class="list-decimal pl-5 space-y-1 text-slate-300">
-        <li>Datas/TZ + ESLint/Prettier/Husky.</li>
-        <li>Modais A11y + atalhos (N, Esc, Ctrl/Cmd+K).</li>
-        <li>Recorrência idempotente.</li>
-        <li>Busca real + memo/debounce.</li>
-        <li>Export/Import (JSON/MD/CSV/TSV).</li>
-        <li>PWA (manifest + SW) e 404.html.</li>
-        <li>(Opcional) @dnd-kit se mobile for prioridade.</li>
-      </ol>
-    </section>
-
-    <!-- NOTAS -->
-    <section id="notas" class="mb-16">
-      <h2 class="text-xl font-bold text-cyan-400 mb-3">Notas rápidas</h2>
-      <ul class="text-slate-400 text-sm list-disc pl-5">
-        <li>✅ Positivos em <span style="color:var(--ok)">verde</span> e ⚠️ pontos de atenção em <span style="color:var(--warn)">âmbar</span>/<span style="color:var(--bad)">vermelho</span> no texto.</li>
-        <li>Este arquivo pode ser a landing do teu GitHub Pages. Os próximos arquivos serão adicionados conforme a seção PWA/Deploy.</li>
-      </ul>
-    </section>
-  </main>
-
-  <footer class="border-t border-slate-800/80 py-6">
-    <div class="max-w-6xl mx-auto px-4 text-sm text-slate-500">
-      © Planner Pro — Doc MVP. Feito para Leo. Última atualização: <span id="dt"></span>.
-    </div>
-  </footer>
-
+  <!-- Registra o Service Worker do PWA -->
   <script>
-    function copyNext(btn){
-      const pre = btn.parentElement;
-      const code = pre.querySelector('code');
-      const text = code.innerText;
-      navigator.clipboard.writeText(text).then(()=>{
-        btn.textContent = "copiado!";
-        setTimeout(()=>btn.textContent="copiar",1200);
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(console.error);
       });
     }
-    document.getElementById('dt').textContent = new Date().toLocaleString('pt-BR');
   </script>
-  <script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(console.error);
-    });
-  }
-</script>
 </body>
 </html>
 
