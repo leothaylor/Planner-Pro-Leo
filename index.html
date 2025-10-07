@@ -10,16 +10,13 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.webmanifest" />
 
-  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' };</script>
 
-  <!-- Inter + Material Icons Round -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
-  <!-- React 18 (UMD) + Babel para JSX inline -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -42,6 +39,7 @@
     const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
     const fmtISO = (d)=>{ const t=new Date(d); t.setMinutes(t.getMinutes()-t.getTimezoneOffset()); return t.toISOString().slice(0,10); };
     const fmtHumano = (d)=> d.toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"});
+    const genId = ()=> Math.random().toString(36).slice(2,9); // ID generator moved to utils
 
     // ===== Cores / Prioridade =====
     const PRIORITY={ high:{text:"text-rose-500",bar:"bg-rose-500",ring:"ring-rose-500/50"}, medium:{text:"text-amber-500",bar:"bg-amber-500",ring:"ring-amber-500/50"}, low:{text:"text-emerald-500",bar:"bg-emerald-500",ring:"ring-emerald-500/50"} };
@@ -62,12 +60,56 @@
       React.useEffect(()=>{ if(status==='running'){ ref.current=setInterval(()=>{ setTime(p=>{ if(p<=1){ clearInterval(ref.current); setStatus('finished'); beep(); return 0;} return p-1;});},1000);} else if(ref.current){ clearInterval(ref.current);} return ()=> clearInterval(ref.current);},[status]);
       const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; return {time,formatted:fmt(time),status,mode,start,pause,reset,setCustom}; }
 
-    // ===== Persistência =====
-    const SCHEMA=1;
+    // ===== Persistência / Recorrência =====
+    const SCHEMA=2; // Versão do schema atualizada
     const weekKey=(a)=>`planner-week:${fmtISO(a)}?v=${SCHEMA}`;
     const SETTINGS_KEY=`planner-settings?v=${SCHEMA}`;
     const REC_KEY=`planner-recurring-tasks?v=${SCHEMA}`;
     const useDebouncedEffect=(fn,deps,ms=800)=>{ React.useEffect(()=>{ const t=setTimeout(()=>fn(),ms); return ()=>clearTimeout(t);},deps); };
+
+    const prioRank={high:0,medium:1,low:2};
+    const sortTasks=(arr=[])=> arr.slice().sort((a,b)=> (prioRank[a.priority||'medium']-prioRank[b.priority||'medium'])|| String(a.time||'').localeCompare(String(b.time||'')));
+
+    // Nova lógica para injetar tarefas recorrentes na semana
+    const processTasks = (currentTasks, recurringTasks, daysInWeek)=>{
+      const newTasks = {...currentTasks};
+      for(const rec of recurringTasks) {
+          if(!rec.isMaster) continue;
+
+          for(const day of daysInWeek) {
+              const dayOfWeek = (day.getDay() + 6) % 7; // 0=Seg, 6=Dom
+              if(rec.recurrenceDays.includes(dayOfWeek)) {
+                  const dayISO = fmtISO(day);
+
+                  // Verifica se uma instância já existe para evitar duplicação (pelo masterId)
+                  const existingInstance = (newTasks[dayISO] || []).find(t => t.masterId === rec.id);
+
+                  if(!existingInstance) {
+                      const instance = {
+                          id: genId(), // ID único para a instância
+                          masterId: rec.id, // ID do mestre
+                          title: rec.title,
+                          time: rec.time || "",
+                          note: rec.note || "",
+                          category: rec.category || "",
+                          priority: rec.priority || 'medium',
+                          done: false,
+                          isRecurring: true // Flag de hábito
+                      };
+
+                      newTasks[dayISO] = [...(newTasks[dayISO] || []), instance];
+                  }
+              }
+          }
+      }
+
+      // Garante que todas as listas de tarefas (incluindo as injetadas) estejam ordenadas
+      for(const key of Object.keys(newTasks)){
+          newTasks[key] = sortTasks(newTasks[key]);
+      }
+
+      return newTasks;
+    };
 
     // ===== Modal (foco inicial 1x) =====
     const Modal=({open,title,children,onClose,initialFocusRef})=>{
@@ -105,8 +147,20 @@
       const [today]=React.useState(()=>new Date());
       const [anchor,setAnchor]=React.useState(()=>startOfWeek(new Date()));
       const [theme,setTheme]=React.useState(()=> (localStorage.getItem(SETTINGS_KEY)? JSON.parse(localStorage.getItem(SETTINGS_KEY)).theme : 'dark'));
-      const [tasks,setTasks]=React.useState(()=>{ const raw=localStorage.getItem(weekKey(startOfWeek(new Date()))); return raw? JSON.parse(raw):{};});
+
       const [recurring,setRecurring]=React.useState(()=>{ const raw=localStorage.getItem(REC_KEY); return raw? JSON.parse(raw):[];});
+
+      // Task initialization must happen after fetching recurring tasks
+      const days=React.useMemo(()=> Array.from({length:7},(_,i)=>addDays(anchor,i)),[anchor]);
+      
+      const [tasks,setTasks]=React.useState(()=>{
+        const weekStart = startOfWeek(new Date());
+        const raw = localStorage.getItem(weekKey(weekStart));
+        const initialTasks = raw ? JSON.parse(raw) : {};
+        const initialDays = Array.from({length:7}, (_,i)=>addDays(weekStart,i));
+        // Inject recurrence on initial load
+        return processTasks(initialTasks, JSON.parse(localStorage.getItem(REC_KEY) || '[]'), initialDays);
+      });
 
       const [dialog,setDialog]=React.useState(null);
       const [form,setForm]=React.useState({title:"",time:"",note:"",category:"",isRecurring:false,recurrenceDays:[],priority:'medium'});
@@ -125,16 +179,20 @@
       React.useEffect(()=>{ document.documentElement.classList.toggle('dark',theme==='dark'); localStorage.setItem(SETTINGS_KEY,JSON.stringify({theme,_schema:SCHEMA})); },[theme]);
 
       const wKey=React.useMemo(()=>weekKey(anchor),[anchor]);
-      React.useEffect(()=>{ const raw=localStorage.getItem(wKey); setTasks(raw?JSON.parse(raw):{}); },[wKey]);
+      
+      // Efeito para carregar e processar tarefas recorrentes ao mudar a semana (anchor) ou a lista de recorrências
+      React.useEffect(()=>{ 
+          const raw=localStorage.getItem(wKey);
+          const loadedTasks = raw? JSON.parse(raw):{};
+          setTasks(processTasks(loadedTasks, recurring, days)); // Atualiza tarefas com as recorrências injetadas
+      },[wKey, anchor, recurring, days]);
 
+      // Efeitos de persistência
       useDebouncedEffect(()=>{ if(dialog||focus) return; setSaving(true); localStorage.setItem(wKey,JSON.stringify(tasks)); setSaving(false); },[wKey,tasks,dialog,focus],800);
       useDebouncedEffect(()=>{ if(dialog||focus) return; localStorage.setItem(REC_KEY,JSON.stringify(recurring)); },[recurring,dialog,focus],800);
 
-      const days=React.useMemo(()=> Array.from({length:7},(_,i)=>addDays(anchor,i)),[anchor]);
-
       const matches=(t,q)=>{ if(!q) return true; const hay=`${t.title} ${t.note||""} ${t.category||""}`.toLowerCase(); return hay.includes(q.toLowerCase()); };
-      const prioRank={high:0,medium:1,low:2};
-      const sortTasks=(arr=[])=> arr.slice().sort((a,b)=> (prioRank[a.priority||'medium']-prioRank[b.priority||'medium'])|| String(a.time||'').localeCompare(String(b.time||'')));
+      
       const filtered=React.useMemo(()=>{ const out={}; for(const k of Object.keys(tasks)) out[k]=sortTasks(tasks[k]).filter(t=>matches(t,search)); return out; },[tasks,search]);
 
       const stats=React.useMemo(()=>{ let total=0,done=0; for(const arr of Object.values(tasks)) for(const t of (arr||[])){ total++; if(t.done) done++; } return {total,done,pct: total?Math.round(done/total*100):0}; },[tasks]);
@@ -149,13 +207,13 @@
       const onDragEnd=()=> setDragged(null);
       const onDrop=(e,targetDate,targetIndex)=>{ e.preventDefault(); if(!dragged){ setDragged(null); return; } setTasks(prev=>{ const {date:srcDate,id:mid}=dragged; const src=[...(prev[srcDate]||[])]; const si=src.findIndex(t=>t.id===mid); if(si===-1) return prev; const [moved]=src.splice(si,1); let tgt=srcDate===targetDate?src:[...(prev[targetDate]||[])]; tgt.splice(targetIndex,0,moved); const nt={...prev}; nt[srcDate]=src; nt[targetDate]=tgt; if(nt[srcDate] && nt[srcDate].length===0) delete nt[srcDate]; return nt; }); setDragged(null); };
 
-      const openCreate=(dayDate)=>{ setForm({title:"",time:"",note:"",category:"",isRecurring:false,recurrenceDays:[(dayDate.getDay()+6)%7],priority:'medium'}); setDialog({date:fmtISO(dayDate),mode:"create"}); };
+      const openCreate=React.useCallback((dayDate)=>{ setForm({title:"",time:"",note:"",category:"",isRecurring:false,recurrenceDays:[(dayDate.getDay()+6)%7],priority:'medium'}); setDialog({date:fmtISO(dayDate),mode:"create"}); },[]);
       const openEdit=(dayISO,task)=>{ setForm({title:task.title||"",time:task.time||"",note:task.note||"",category:task.category||"",priority:task.priority||'medium',isRecurring:false,recurrenceDays:[]}); setDialog({date:dayISO,mode:"edit",id:task.id,isRecurringInstance:task.isRecurring}); };
       const openRecurrence=()=>{ setForm({title:"",time:"",note:"",category:"",isRecurring:true,recurrenceDays:[(days[0].getDay()+6)%7],priority:'medium'}); setDialog({date:fmtISO(days[0]),mode:"createRecurrence"}); };
 
       const submit=(e)=>{ e?.preventDefault?.(); if(!dialog||!form.title.trim()) return; const {title,time,note,category,priority,recurrenceDays}=form;
-        if(dialog.mode==="create"){ const id=Math.random().toString(36).slice(2,9); addTask(dialog.date,{id,title:title.trim(),time,note,category,priority,done:false}); }
-        else if(dialog.mode==="createRecurrence"){ if(!recurrenceDays.length){ toast("Selecione ao menos um dia."); return; } const id=Math.random().toString(36).slice(2,9); setRecurring(prev=>[...prev,{id,title:title.trim(),time,note,category,recurrenceDays,priority,isMaster:true}]); toast("Hábito recorrente criado."); }
+        if(dialog.mode==="create"){ const id=genId(); addTask(dialog.date,{id,title:title.trim(),time,note,category,priority,done:false}); } // Usando genId()
+        else if(dialog.mode==="createRecurrence"){ if(!recurrenceDays.length){ toast("Selecione ao menos um dia."); return; } const id=genId(); setRecurring(prev=>[...prev,{id,title:title.trim(),time,note,category,recurrenceDays,priority,isMaster:true}]); toast("Hábito recorrente criado."); } // Usando genId()
         else if(dialog.mode==="edit"&&dialog.id){ updateTask(dialog.date,dialog.id,{title:title.trim(),time,note,category,priority}); toast("Tarefa atualizada."); }
         setDialog(null);
       };
@@ -163,9 +221,24 @@
       const doExportJSON=()=>{ const payload={version:SCHEMA,weekISO:fmtISO(anchor),tasks,recurring}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.json`; a.click(); URL.revokeObjectURL(a.href); toast("Backup JSON salvo."); };
       const doExportMarkdown=()=>{ const lines=[`# Semana ${fmtISO(anchor)}`]; for(const d of days){ const iso=fmtISO(d); const arr=(tasks[iso]||[]); lines.push(`\n## ${fmtHumano(d)} (${iso})`); for(const t of sortTasks(arr)){ lines.push(`- ${t.done?"[x]":"[ ]"} ${t.time?t.time+" ":""}${t.title} ${t.priority?`(prio: ${t.priority})`:""} ${t.category?`(cat: ${t.category})`:""}`); } } const blob=new Blob([lines.join("\n")],{type:"text/markdown"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.md`; a.click(); URL.revokeObjectURL(a.href); toast("Diário Markdown exportado."); };
       const doExportCSV=()=>{ const header=["date","title","priority","category","time","done","note"]; const rows=[header.join(",")]; for(const d of days){ const iso=fmtISO(d); for(const t of (tasks[iso]||[])){ const r=[iso,JSON.stringify(t.title),t.priority||"",t.category||"",t.time||"",t.done,JSON.stringify(t.note||"")]; rows.push(r.join(",")); } } const blob=new Blob([rows.join("\n")],{type:"text/csv"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.csv`; a.click(); URL.revokeObjectURL(a.href); toast("CSV exportado."); };
-      const onImportFile=async(ev)=>{ const f=ev.target.files?.[0]; if(!f) return; const text=await f.text(); try{ const data=JSON.parse(text); if(!data||typeof data!=='object') throw new Error(); if(data.tasks) setTasks(data.tasks); if(data.recurring) setRecurring(data.recurring); toast("Dados importados."); }catch(e){ toast("Arquivo inválido."); } ev.target.value=""; };
+      const onImportFile=async(ev)=>{ const f=ev.target.files?.[0]; if(!f) return; const text=await f.text(); try{ const data=JSON.parse(text); if(!data||typeof data!=='object') throw new Error(); if(data.tasks) setTasks(processTasks(data.tasks, data.recurring || recurring, days)); if(data.recurring) setRecurring(data.recurring); toast("Dados importados."); }catch(e){ toast("Arquivo inválido."); } ev.target.value=""; };
 
       const startFocus=(date,id)=>{ const t=(tasks[date]||[]).find(x=>x.id===id); if(t){ setFocus({date,id,task:t}); pomodoro.reset(); } };
+
+      // Lógica do atalho de teclado (Ctrl/Cmd + N e Ctrl/Cmd + K)
+      React.useEffect(()=>{
+        const handleKeydown = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !dialog) { // Ctrl/Cmd + N para Nova Tarefa
+            e.preventDefault();
+            openCreate(days[0]); // Abre para o primeiro dia visível (Segunda)
+          } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') { // Ctrl/Cmd + K para Busca
+            e.preventDefault();
+            document.getElementById('busca')?.focus();
+          }
+        };
+        window.addEventListener('keydown', handleKeydown);
+        return () => window.removeEventListener('keydown', handleKeydown);
+      },[days, dialog, openCreate]); // Depende de days e openCreate
 
       const themeClasses = theme==='dark'? {bg:"bg-slate-950",text:"text-slate-100",headerBg:"bg-slate-950/90",headerBorder:"border-slate-800",cardBg:"bg-slate-900",cardBorder:"border-slate-700",cardHover:"hover:border-slate-600",itemBg:"bg-slate-800/80",itemHover:"hover:bg-slate-800",neutral:"text-slate-400",inputBg:"bg-slate-800",inputBorder:"border-slate-700",inputFocus:"focus:border-cyan-500"} : {bg:"bg-slate-50",text:"text-slate-900",headerBg:"bg-white/90",headerBorder:"border-slate-200",cardBg:"bg-white",cardBorder:"border-slate-300",cardHover:"hover:border-slate-400",itemBg:"bg-slate-100",itemHover:"hover:bg-slate-200",neutral:"text-slate-500",inputBg:"bg-white",inputBorder:"border-slate-300",inputFocus:"focus:border-cyan-600"};
       const dayCardWidth="w-[90vw] sm:w-[50vw] lg:w-[40vw] xl:w-[25vw]";
@@ -248,7 +321,7 @@
                       })}
                     </div>
                     <button onClick={()=>openCreate(d)} className={`mt-4 w-full text-center text-sm text-cyan-400 border-2 border-dashed ${themeClasses.cardBorder} hover:border-cyan-600/60 rounded-xl px-3 py-2 ${theme==='dark'?'bg-slate-900/50 hover:bg-slate-800':'bg-slate-50 hover:bg-slate-100'} transition flex items-center justify-center gap-1`}>
-                      <span className="material-icons-round text-base">add_box</span> Adicionar Tarefa (N)
+                      <span className="material-icons-round text-base">add_box</span> Adicionar Tarefa (Ctrl/Cmd + N)
                     </button>
                   </section>
                 );
@@ -395,7 +468,9 @@
           )}
 
           <footer className="max-w-7xl mx-auto px-4 pb-6 mt-12 border-t border-slate-800/50">
-            <div className={`mt-6 text-center text-xs ${themeClasses.neutral}`}>* Salvamento local (localStorage) com debounce de 0.8s. Pressione <kbd>Ctrl/Cmd + K</kbd> para focar a busca.</div>
+            <div className={`mt-6 text-center text-xs ${themeClasses.neutral}`}>
+              * Salvamento local (localStorage) com debounce de 0.8s. Pressione <kbd>Ctrl/Cmd + K</kbd> para focar a busca ou <kbd>Ctrl/Cmd + N</kbd> para adicionar nova tarefa.
+            </div>
           </footer>
 
           <Snackbar/>
