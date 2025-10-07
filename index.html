@@ -8,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#06b6d4">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
   <style>
     :root { --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --info:#06b6d4; }
     html { scroll-behavior: smooth }
@@ -515,5 +519,13 @@ const StatsTiles = React.memo(function StatsTiles(props){ /* ... */ });
     }
     document.getElementById('dt').textContent = new Date().toLocaleString('pt-BR');
   </script>
+  <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(console.error);
+    });
+  }
+</script>
 </body>
 </html>
+
