@@ -20,6 +20,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <style>
     :root { --ring: 0 255 255; }
@@ -34,46 +35,134 @@
   <div id="root"></div>
 
   <script type="text/babel">
+    // ===== Supabase Config (CRIE UM NOVO PROJETO PARA ESTE APP) =====
+    // ATENÇÃO: SUBSTITUA ESTES PLACEHOLDERS PELAS SUAS CHAVES REAIS!
+    const SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT_URL.supabase.co"; 
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_PUBLIC_KEY"; 
+    const SUPABASE_TABLE = "planner_state"; // Nome da tabela criada no passo 2
+    
+    let supabase = null;
+    try {
+        if (SUPABASE_URL.includes("YOUR_SUPABASE")) throw new Error("Chaves Supabase não configuradas.");
+        // Acesso global do Supabase UMD é via `window.supabaseJs`
+        supabase = window.supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+        console.warn("Cloud Sync desativado (Supabase não configurado ou falha na inicialização).", e.message);
+    }
+
     // ===== Utils =====
     const startOfWeek = (d)=>{ const x=new Date(d); const day=(x.getDay()+6)%7; const r=new Date(x); r.setDate(x.getDate()-day); r.setHours(0,0,0,0); return r; };
     const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
     const fmtISO = (d)=>{ const t=new Date(d); t.setMinutes(t.getMinutes()-t.getTimezoneOffset()); return t.toISOString().slice(0,10); };
     const fmtHumano = (d)=> d.toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"});
-    const genId = ()=> Math.random().toString(36).slice(2,9); // ID generator moved to utils
+    const genId = ()=> Math.random().toString(36).slice(2,9);
 
-    // ===== Cores / Prioridade =====
+    // ===== Cores / Prioridade (Sem Alterações) =====
     const PRIORITY={ high:{text:"text-rose-500",bar:"bg-rose-500",ring:"ring-rose-500/50"}, medium:{text:"text-amber-500",bar:"bg-amber-500",ring:"ring-amber-500/50"}, low:{text:"text-emerald-500",bar:"bg-emerald-500",ring:"ring-emerald-500/50"} };
     const CATEGORIES=[ "Treino – Peito","Treino – Costas","Treino – Pernas","Treino – Ombros","Treino – Bíceps","Treino – Tríceps","Cardio","Alongamento","Mobilidade","Medicação","Consulta","Exame","Sono/Rotina","Estudo – ENEM","Estudo – Medicina","Leitura Técnica","Revisão/Flashcards","Projeto 60","Trabalho – ACS","Trabalho – Barbeiro","Gravar Vídeo (Sora/Veo)","Edição Vídeo","Roteiro","Design/Canva","Financeiro","Doméstico","Compras","Administração","Deslocamento","Social/Lazer" ];
     const CAT_COLORS={ "Treino – Peito":"emerald","Treino – Costas":"emerald","Treino – Pernas":"emerald","Treino – Ombros":"emerald","Treino – Bíceps":"emerald","Treino – Tríceps":"emerald","Cardio":"sky","Alongamento":"teal","Mobilidade":"teal","Medicação":"rose","Consulta":"rose","Exame":"rose","Sono/Rotina":"slate","Estudo – ENEM":"violet","Estudo – Medicina":"violet","Leitura Técnica":"indigo","Revisão/Flashcards":"indigo","Projeto 60":"cyan","Trabalho – ACS":"amber","Trabalho – Barbeiro":"amber","Gravar Vídeo (Sora/Veo)":"fuchsia","Edição Vídeo":"fuchsia","Roteiro":"fuchsia","Design/Canva":"pink","Financeiro":"lime","Doméstico":"orange","Compras":"orange","Administração":"yellow","Deslocamento":"blue","Social/Lazer":"green" };
     function colorClass(cat){ const c=CAT_COLORS[cat]||"slate"; const map={ emerald:{pill:"bg-emerald-500/20 text-emerald-700 border-emerald-400/30"}, sky:{pill:"bg-sky-500/20 text-sky-700 border-sky-400/30"}, teal:{pill:"bg-teal-500/20 text-teal-700 border-teal-400/30"}, rose:{pill:"bg-rose-500/20 text-rose-700 border-rose-400/30"}, slate:{pill:"bg-slate-500/20 text-slate-700 border-slate-400/30"}, violet:{pill:"bg-violet-500/20 text-violet-700 border-violet-400/30"}, indigo:{pill:"bg-indigo-500/20 text-indigo-700 border-indigo-400/30"}, cyan:{pill:"bg-cyan-500/20 text-cyan-700 border-cyan-400/30"}, amber:{pill:"bg-amber-500/20 text-amber-700 border-amber-400/30"}, fuchsia:{pill:"bg-fuchsia-500/20 text-fuchsia-700 border-fuchsia-400/30"}, pink:{pill:"bg-pink-500/20 text-pink-700 border-pink-400/30"}, lime:{pill:"bg-lime-500/20 text-lime-700 border-lime-400/30"}, orange:{pill:"bg-orange-500/20 text-orange-700 border-orange-400/30"}, yellow:{pill:"bg-yellow-500/20 text-yellow-700 border-yellow-400/30"}, blue:{pill:"bg-blue-500/20 text-blue-700 border-blue-400/30"}, green:{pill:"bg-green-500/20 text-green-700 border-green-400/30"} }; return map[c]||map.slate; }
 
-    // ===== Beep =====
+    // ===== Beep (Sem Alterações) =====
     const beep=()=>{ const Ctx=window.AudioContext||window.webkitAudioContext; try{ const ctx=new Ctx(); const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.18,ctx.currentTime); o.start(); o.stop(ctx.currentTime+0.15);}catch(e){} };
 
-    // ===== Snackbar =====
+    // ===== Snackbar (Sem Alterações) =====
     function useSnackbar(){ const [msg,setMsg]=React.useState(null); const show=(t,ms=2400)=>{ setMsg(t); setTimeout(()=>setMsg(null),ms); }; const Snackbar=()=> msg?(<div role="status" aria-live="polite" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-full bg-slate-900/90 text-slate-100 border border-slate-700 shadow-2xl">{msg}</div>):null; return {show,Snackbar}; }
 
-    // ===== Pomodoro =====
+    // ===== Pomodoro (Sem Alterações) =====
     const POMODORO={work:25*60,shortBreak:5*60,longBreak:15*60};
     function usePomodoroTimer(){ const [status,setStatus]=React.useState('stopped'); const [mode,setMode]=React.useState('work'); const [time,setTime]=React.useState(POMODORO.work); const ref=React.useRef(null);
       const start=React.useCallback(()=>setStatus('running'),[]); const pause=React.useCallback(()=>setStatus('paused'),[]); const reset=React.useCallback(()=>{setStatus('stopped');setMode('work');setTime(POMODORO.work);},[]); const setCustom=React.useCallback(m=>{ if(POMODORO[m]){ setMode(m); setTime(POMODORO[m]); setStatus('stopped');}},[]);
       React.useEffect(()=>{ if(status==='running'){ ref.current=setInterval(()=>{ setTime(p=>{ if(p<=1){ clearInterval(ref.current); setStatus('finished'); beep(); return 0;} return p-1;});},1000);} else if(ref.current){ clearInterval(ref.current);} return ()=> clearInterval(ref.current);},[status]);
       const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; return {time,formatted:fmt(time),status,mode,start,pause,reset,setCustom}; }
 
-    // ===== Persistência / Recorrência =====
-    const SCHEMA=2; // Versão do schema atualizada
-    const weekKey=(a)=>`planner-week:${fmtISO(a)}?v=${SCHEMA}`;
+    // ===== Persistência / Recorrência (Cloud/Local Namespaced) =====
+    const SCHEMA=3; // Versão do schema atualizada para Cloud Sync
     const SETTINGS_KEY=`planner-settings?v=${SCHEMA}`;
+    // Estas chaves continuam para Local Storage (a chave da semana usa weekKey, os recorrentes usam REC_KEY)
     const REC_KEY=`planner-recurring-tasks?v=${SCHEMA}`;
+    
+    // Namespaced Keys (para LocalStorage quando logado)
+    const NS_PREFIX = "planner-pro-ns_";
+    const nsKey = (base, uid) => `${NS_PREFIX}${base}_${uid}?v=${SCHEMA}`;
+    
+    const loadStateNS = (baseKey, uid) => {
+        const key = nsKey(baseKey, uid);
+        const raw = localStorage.getItem(key);
+        try {
+            return raw ? JSON.parse(raw) : null;
+        } catch(e) {
+            console.error(`Erro ao carregar ${key} do localStorage`, e);
+            return null;
+        }
+    };
+
+    const saveStateNS = (baseKey, uid, value) => {
+        const key = nsKey(baseKey, uid);
+        localStorage.setItem(key, JSON.stringify(value));
+    };
+
+    // Cloud Persistence: Save (tasks and recurring)
+    const saveCloud = async (uid, currentTasks, recurringList, toast) => {
+        if (!supabase || !uid) return;
+        try {
+            const data = {
+                user_id: uid,
+                tasks: currentTasks,
+                recurring: recurringList,
+                updated_at: new Date().toISOString()
+            };
+            const { error } = await supabase
+                .from(SUPABASE_TABLE)
+                .upsert(data, { onConflict: 'user_id' });
+
+            if (error) throw error;
+            toast("☁️ Salvo na nuvem.");
+        } catch (error) {
+            console.error("Erro ao salvar no Supabase:", error);
+            toast("🔴 Erro ao salvar na nuvem.");
+        }
+    };
+
+    // Cloud Persistence: Load
+    const loadCloud = async (uid, toast) => {
+        if (!supabase || !uid) return { tasks: null, recurring: null };
+
+        try {
+            const { data, error } = await supabase
+                .from(SUPABASE_TABLE)
+                .select(`tasks, recurring`)
+                .eq('user_id', uid)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error; // PGRST116: No rows found
+
+            if (data) {
+                toast("☁️ Dados da nuvem carregados.");
+                return { 
+                    tasks: data.tasks, 
+                    recurring: data.recurring || [] 
+                };
+            }
+            // If no data in cloud, initialize with an empty object/array
+            return { tasks: {}, recurring: [] };
+
+        } catch (error) {
+            console.error("Erro ao carregar do Supabase:", error);
+            toast("🔴 Erro ao carregar da nuvem. Usando local.");
+            return { tasks: null, recurring: null }; // Fallback to local
+        }
+    };
+
     const useDebouncedEffect=(fn,deps,ms=800)=>{ React.useEffect(()=>{ const t=setTimeout(()=>fn(),ms); return ()=>clearTimeout(t);},deps); };
 
     const prioRank={high:0,medium:1,low:2};
     const sortTasks=(arr=[])=> arr.slice().sort((a,b)=> (prioRank[a.priority||'medium']-prioRank[b.priority||'medium'])|| String(a.time||'').localeCompare(String(b.time||'')));
 
-    // Nova lógica para injetar tarefas recorrentes na semana
-    const processTasks = (currentTasks, recurringTasks, daysInWeek)=>{
+    // Lógica para injetar tarefas recorrentes na semana (ajustada para receber listas)
+    const processTasks = (currentTasks, recurringList, daysInWeek)=>{
       const newTasks = {...currentTasks};
-      for(const rec of recurringTasks) {
+      for(const rec of recurringList) {
           if(!rec.isMaster) continue;
 
           for(const day of daysInWeek) {
@@ -111,7 +200,37 @@
       return newTasks;
     };
 
-    // ===== Modal (foco inicial 1x) =====
+    // ===== Auth Hook (Supabase) =====
+    function useAuth(){
+        const [user,setUser] = React.useState(null);
+        const [authLoading,setAuthLoading] = React.useState(!!supabase);
+
+        React.useEffect(()=>{
+            if(!supabase) {
+                setAuthLoading(false);
+                return;
+            }
+
+            // Initial session check
+            supabase.auth.getSession().then(({data:{session}})=>{
+                setUser(session?.user ?? null);
+                setAuthLoading(false);
+            });
+
+            // Subscription for auth changes
+            const {data: listener} = supabase.auth.onAuthStateChange((event, session)=>{
+                setUser(session?.user ?? null);
+                setAuthLoading(false);
+            });
+
+            return ()=> listener?.subscription.unsubscribe();
+        },[]);
+
+        return {user, authLoading, supabase};
+    }
+
+
+    // ===== Modal (foco inicial 1x - Sem Alterações) =====
     const Modal=({open,title,children,onClose,initialFocusRef})=>{
       const wasOpenRef=React.useRef(false);
       React.useEffect(()=>{
@@ -142,26 +261,114 @@
       );
     };
 
-    // ===== App =====
+    // ===== Componente de Login/Status (Novo) =====
+    const AuthUI = ({supabase, user, themeClasses, toast}) => {
+      const [email, setEmail] = React.useState('');
+      const [password, setPassword] = React.useState('');
+      const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
+      const [isSignUp, setIsSignUp] = React.useState(false);
+      const [authError, setAuthError] = React.useState(null);
+  
+      const handleAuth = async (e) => {
+          e.preventDefault();
+          setAuthError(null);
+          try {
+              if (isSignUp) {
+                  const { error } = await supabase.auth.signUp({ email, password });
+                  if (error) throw error;
+                  toast("✅ Verifique seu e-mail para confirmar a conta.");
+                  setIsLoginModalOpen(false);
+              } else {
+                  const { error } = await supabase.auth.signInWithPassword({ email, password });
+                  if (error) throw error;
+                  toast("✅ Login realizado!");
+                  setIsLoginModalOpen(false);
+              }
+          } catch (error) {
+              setAuthError(error.message);
+          }
+      };
+  
+      const handleLogout = async () => {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+              console.error(error);
+              toast("🔴 Erro ao sair.");
+          } else {
+              toast("👋 Saiu da conta.");
+          }
+      };
+  
+      if (!supabase) {
+          return <span className={`text-xs px-2 py-1 rounded-full ${themeClasses.inputBg} ${themeClasses.neutral}`}>Offline</span>;
+      }
+  
+      if (user) {
+          return (
+              <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-1 rounded-full text-emerald-300 bg-emerald-800/30 border border-emerald-600`}>
+                      ☁️ Logado: {user.email.slice(0, 15)}...
+                  </span>
+                  <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg text-sm border border-rose-600 bg-rose-800/30 text-rose-300 hover:bg-rose-800/40 transition shadow-md focus-ring" title="Sair da Conta">
+                      <span className="material-icons-round text-base">logout</span> Sair
+                  </button>
+              </div>
+          );
+      }
+  
+      return (
+          <>
+              <button onClick={() => { setIsLoginModalOpen(true); setIsSignUp(false); }} className="px-3 py-1.5 rounded-lg text-sm border border-cyan-600 bg-cyan-800/30 text-cyan-300 hover:bg-cyan-800/40 transition shadow-md flex items-center gap-1 focus-ring" title="Login/Cadastro para Cloud Sync">
+                  <span className="material-icons-round text-base">cloud_upload</span> Cloud Sync
+              </button>
+              <Modal open={isLoginModalOpen} title={isSignUp ? "☁️ Cadastro" : "☁️ Login"} onClose={() => setIsLoginModalOpen(false)} initialFocusRef={null}>
+                  <form onSubmit={handleAuth} className="space-y-3">
+                      {authError && <p className="text-rose-500 text-sm">{authError}</p>}
+                      <label className="block text-sm">
+                          <span className="text-slate-400">E-mail</span>
+                          <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`}
+                              required
+                          />
+                      </label>
+                      <label className="block text-sm">
+                          <span className="text-slate-400">Senha</span>
+                          <input
+                              type="password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              className={`mt-1 w-full px-3 py-2 rounded-lg ${themeClasses.inputBg} border ${themeClasses.inputBorder} ${themeClasses.inputFocus} outline-none`}
+                              required
+                          />
+                      </label>
+                      <div className="flex justify-between items-center pt-2">
+                          <button type="button" onClick={() => setIsSignUp(v => !v)} className="text-cyan-400 hover:text-cyan-300 text-sm transition">
+                              {isSignUp ? "Já tenho conta (Login)" : "Quero criar uma conta (Cadastro)"}
+                          </button>
+                          <button type="submit" className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition">
+                              {isSignUp ? "Cadastrar" : "Entrar"}
+                          </button>
+                      </div>
+                  </form>
+              </Modal>
+          </>
+      );
+    };
+
+    // ===== App (Com Cloud Sync) =====
     function App(){
+      const {user, authLoading, supabase} = useAuth(); // Novo: Hook de autenticação
       const [today]=React.useState(()=>new Date());
       const [anchor,setAnchor]=React.useState(()=>startOfWeek(new Date()));
       const [theme,setTheme]=React.useState(()=> (localStorage.getItem(SETTINGS_KEY)? JSON.parse(localStorage.getItem(SETTINGS_KEY)).theme : 'dark'));
 
-      const [recurring,setRecurring]=React.useState(()=>{ const raw=localStorage.getItem(REC_KEY); return raw? JSON.parse(raw):[];});
-
-      // Task initialization must happen after fetching recurring tasks
-      const days=React.useMemo(()=> Array.from({length:7},(_,i)=>addDays(anchor,i)),[anchor]);
+      const [tasks,setTasks]=React.useState({});
+      const [recurring,setRecurring]=React.useState([]);
+      const [dataLoading,setDataLoading] = React.useState(true); // Novo: Estado de carregamento
       
-      const [tasks,setTasks]=React.useState(()=>{
-        const weekStart = startOfWeek(new Date());
-        const raw = localStorage.getItem(weekKey(weekStart));
-        const initialTasks = raw ? JSON.parse(raw) : {};
-        const initialDays = Array.from({length:7}, (_,i)=>addDays(weekStart,i));
-        // Inject recurrence on initial load
-        return processTasks(initialTasks, JSON.parse(localStorage.getItem(REC_KEY) || '[]'), initialDays);
-      });
-
       const [dialog,setDialog]=React.useState(null);
       const [form,setForm]=React.useState({title:"",time:"",note:"",category:"",isRecurring:false,recurrenceDays:[],priority:'medium'});
       const [search,setSearch]=React.useState("");
@@ -175,21 +382,77 @@
 
       const {show:toast,Snackbar}=useSnackbar();
       const pomodoro=usePomodoroTimer();
-
+      const days=React.useMemo(()=> Array.from({length:7},(_,i)=>addDays(anchor,i)),[anchor]);
+      
       React.useEffect(()=>{ document.documentElement.classList.toggle('dark',theme==='dark'); localStorage.setItem(SETTINGS_KEY,JSON.stringify({theme,_schema:SCHEMA})); },[theme]);
 
       const wKey=React.useMemo(()=>weekKey(anchor),[anchor]);
       
-      // Efeito para carregar e processar tarefas recorrentes ao mudar a semana (anchor) ou a lista de recorrências
-      React.useEffect(()=>{ 
-          const raw=localStorage.getItem(wKey);
-          const loadedTasks = raw? JSON.parse(raw):{};
-          setTasks(processTasks(loadedTasks, recurring, days)); // Atualiza tarefas com as recorrências injetadas
-      },[wKey, anchor, recurring, days]);
+      // Efeito de Carregamento/Sincronização
+      React.useEffect(()=>{
+        if(authLoading) return; // Espera o estado de Auth carregar
 
-      // Efeitos de persistência
-      useDebouncedEffect(()=>{ if(dialog||focus) return; setSaving(true); localStorage.setItem(wKey,JSON.stringify(tasks)); setSaving(false); },[wKey,tasks,dialog,focus],800);
-      useDebouncedEffect(()=>{ if(dialog||focus) return; localStorage.setItem(REC_KEY,JSON.stringify(recurring)); },[recurring,dialog,focus],800);
+        const loadData = async () => {
+          setDataLoading(true);
+          const weekStart = startOfWeek(new Date());
+          let loadedTasks = null;
+          let loadedRecurring = null;
+
+          if (user) {
+            // 1. Tenta Cloud
+            const cloudData = await loadCloud(user.id, toast);
+            loadedTasks = cloudData.tasks;
+            loadedRecurring = cloudData.recurring;
+
+            // 2. Se Cloud falhar (tasks: null), tenta Local Namespaced
+            if (loadedTasks === null) {
+              const localNS = loadStateNS(weekKey(weekStart), user.id);
+              if (localNS?.tasks) {
+                loadedTasks = localNS.tasks;
+                loadedRecurring = localNS.recurring;
+                toast("💾 Carregando do Local (Usuário logado).");
+              }
+            }
+          }
+          
+          // 3. Fallback para Local Global (comportamento original)
+          if (loadedTasks === null) {
+              const rawTasks = localStorage.getItem(weekKey(weekStart));
+              loadedTasks = rawTasks ? JSON.parse(rawTasks) : {};
+              const rawRec = localStorage.getItem(REC_KEY);
+              loadedRecurring = rawRec ? JSON.parse(rawRec) : [];
+              if (user) toast("⚠️ Sincronização falhou. Usando dados locais.");
+              else toast("🌍 Carregando do Local (Sincronização desativada).");
+          }
+
+          // Aplica dados carregados e injeta recorrência
+          setRecurring(loadedRecurring);
+          setTasks(processTasks(loadedTasks, loadedRecurring, days));
+          setDataLoading(false);
+        };
+        
+        loadData();
+      }, [user, authLoading, anchor]); // user e authLoading garantem que o carregamento ocorra após o login/logout
+
+      // Efeito de Persistência (Autosave com debounce)
+      useDebouncedEffect(()=>{
+          if(dialog||focus || dataLoading) return;
+          setSaving(true);
+          
+          // Salva Localmente (Namespaced se logado)
+          if(user) {
+            // Salva Local Namespaced para o usuário atual
+            saveStateNS(wKey, user.id, {tasks, recurring});
+            // Salva no Cloud
+            saveCloud(user.id, tasks, recurring, toast);
+          }
+          
+          // Salva Localmente (Global/Não Namespaced) - Mantém compatibilidade p/ deslogado
+          localStorage.setItem(wKey, JSON.stringify(tasks));
+          localStorage.setItem(REC_KEY, JSON.stringify(recurring));
+
+          setSaving(false); 
+      },[wKey, tasks, recurring, user, dialog, focus, dataLoading], 800);
 
       const matches=(t,q)=>{ if(!q) return true; const hay=`${t.title} ${t.note||""} ${t.category||""}`.toLowerCase(); return hay.includes(q.toLowerCase()); };
       
@@ -212,8 +475,8 @@
       const openRecurrence=()=>{ setForm({title:"",time:"",note:"",category:"",isRecurring:true,recurrenceDays:[(days[0].getDay()+6)%7],priority:'medium'}); setDialog({date:fmtISO(days[0]),mode:"createRecurrence"}); };
 
       const submit=(e)=>{ e?.preventDefault?.(); if(!dialog||!form.title.trim()) return; const {title,time,note,category,priority,recurrenceDays}=form;
-        if(dialog.mode==="create"){ const id=genId(); addTask(dialog.date,{id,title:title.trim(),time,note,category,priority,done:false}); } // Usando genId()
-        else if(dialog.mode==="createRecurrence"){ if(!recurrenceDays.length){ toast("Selecione ao menos um dia."); return; } const id=genId(); setRecurring(prev=>[...prev,{id,title:title.trim(),time,note,category,recurrenceDays,priority,isMaster:true}]); toast("Hábito recorrente criado."); } // Usando genId()
+        if(dialog.mode==="create"){ const id=genId(); addTask(dialog.date,{id,title:title.trim(),time,note,category,priority,done:false}); }
+        else if(dialog.mode==="createRecurrence"){ if(!recurrenceDays.length){ toast("Selecione ao menos um dia."); return; } const id=genId(); setRecurring(prev=>[...prev,{id,title:title.trim(),time,note,category,recurrenceDays,priority,isMaster:true}]); toast("Hábito recorrente criado."); }
         else if(dialog.mode==="edit"&&dialog.id){ updateTask(dialog.date,dialog.id,{title:title.trim(),time,note,category,priority}); toast("Tarefa atualizada."); }
         setDialog(null);
       };
@@ -221,7 +484,12 @@
       const doExportJSON=()=>{ const payload={version:SCHEMA,weekISO:fmtISO(anchor),tasks,recurring}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.json`; a.click(); URL.revokeObjectURL(a.href); toast("Backup JSON salvo."); };
       const doExportMarkdown=()=>{ const lines=[`# Semana ${fmtISO(anchor)}`]; for(const d of days){ const iso=fmtISO(d); const arr=(tasks[iso]||[]); lines.push(`\n## ${fmtHumano(d)} (${iso})`); for(const t of sortTasks(arr)){ lines.push(`- ${t.done?"[x]":"[ ]"} ${t.time?t.time+" ":""}${t.title} ${t.priority?`(prio: ${t.priority})`:""} ${t.category?`(cat: ${t.category})`:""}`); } } const blob=new Blob([lines.join("\n")],{type:"text/markdown"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.md`; a.click(); URL.revokeObjectURL(a.href); toast("Diário Markdown exportado."); };
       const doExportCSV=()=>{ const header=["date","title","priority","category","time","done","note"]; const rows=[header.join(",")]; for(const d of days){ const iso=fmtISO(d); for(const t of (tasks[iso]||[])){ const r=[iso,JSON.stringify(t.title),t.priority||"",t.category||"",t.time||"",t.done,JSON.stringify(t.note||"")]; rows.push(r.join(",")); } } const blob=new Blob([rows.join("\n")],{type:"text/csv"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`planner-${fmtISO(anchor)}.csv`; a.click(); URL.revokeObjectURL(a.href); toast("CSV exportado."); };
-      const onImportFile=async(ev)=>{ const f=ev.target.files?.[0]; if(!f) return; const text=await f.text(); try{ const data=JSON.parse(text); if(!data||typeof data!=='object') throw new Error(); if(data.tasks) setTasks(processTasks(data.tasks, data.recurring || recurring, days)); if(data.recurring) setRecurring(data.recurring); toast("Dados importados."); }catch(e){ toast("Arquivo inválido."); } ev.target.value=""; };
+      const onImportFile=async(ev)=>{ const f=ev.target.files?.[0]; if(!f) return; const text=await f.text(); try{ const data=JSON.parse(text); if(!data||typeof data!=='object') throw new Error(); 
+        // Lógica de importação atualizada para usar a nova função de processamento de recorrência
+        if(data.recurring) setRecurring(data.recurring);
+        if(data.tasks) setTasks(processTasks(data.tasks, data.recurring || recurring, days));
+        if(user) saveCloud(user.id, data.tasks || tasks, data.recurring || recurring, toast); // Salva importação na nuvem
+        toast("Dados importados."); }catch(e){ toast("Arquivo inválido."); } ev.target.value=""; };
 
       const startFocus=(date,id)=>{ const t=(tasks[date]||[]).find(x=>x.id===id); if(t){ setFocus({date,id,task:t}); pomodoro.reset(); } };
 
@@ -238,24 +506,32 @@
         };
         window.addEventListener('keydown', handleKeydown);
         return () => window.removeEventListener('keydown', handleKeydown);
-      },[days, dialog, openCreate]); // Depende de days e openCreate
+      },[days, dialog, openCreate]);
 
       const themeClasses = theme==='dark'? {bg:"bg-slate-950",text:"text-slate-100",headerBg:"bg-slate-950/90",headerBorder:"border-slate-800",cardBg:"bg-slate-900",cardBorder:"border-slate-700",cardHover:"hover:border-slate-600",itemBg:"bg-slate-800/80",itemHover:"hover:bg-slate-800",neutral:"text-slate-400",inputBg:"bg-slate-800",inputBorder:"border-slate-700",inputFocus:"focus:border-cyan-500"} : {bg:"bg-slate-50",text:"text-slate-900",headerBg:"bg-white/90",headerBorder:"border-slate-200",cardBg:"bg-white",cardBorder:"border-slate-300",cardHover:"hover:border-slate-400",itemBg:"bg-slate-100",itemHover:"hover:bg-slate-200",neutral:"text-slate-500",inputBg:"bg-white",inputBorder:"border-slate-300",inputFocus:"focus:border-cyan-600"};
       const dayCardWidth="w-[90vw] sm:w-[50vw] lg:w-[40vw] xl:w-[25vw]";
 
       return (
         <div className={`min-h-screen ${themeClasses.bg} ${themeClasses.text}`}>
-          {saving && <div className="pointer-events-none fixed top-0 right-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-cyan-600/70 text-white shadow-lg animate-pulse">Salvando...</div>}
+          {saving && <div className="pointer-events-none fixed top-0 right-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-cyan-600/70 text-white shadow-lg animate-pulse">Salvando {user?'na Nuvem...':'localmente...'}</div>}
+          {dataLoading && <div className="pointer-events-none fixed top-0 left-0 m-4 z-50 px-3 py-1 text-xs rounded-full bg-amber-600/70 text-white shadow-lg animate-pulse">Carregando dados...</div>}
+
 
           <header className={`sticky top-0 z-20 backdrop-blur ${themeClasses.headerBg} border-b ${themeClasses.headerBorder} shadow-xl`}>
             <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 mr-auto">
                 <button onClick={()=>setHeaderCollapsed(v=>!v)} className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`} title={headerCollapsed?"Mostrar métricas":"Ocultar métricas"}>
                   <span className="material-icons-round text-lg">{headerCollapsed?'open_in_full':'close_fullscreen'}</span>
                 </button>
                 <span className="material-icons-round text-2xl text-cyan-500">playlist_add_check</span>
                 <h1 className="text-xl font-bold tracking-tight text-cyan-400">Planner Pro</h1>
               </div>
+
+              {/* Botões do AuthUI (Novo) */}
+              <div className="hidden md:flex items-center gap-2">
+                <AuthUI supabase={supabase} user={user} themeClasses={themeClasses} toast={toast} />
+              </div>
+
               <div className="flex items-center gap-2 ml-auto">
                 <button onClick={()=>setTheme(t=>t==='dark'?'light':'dark')} className={`p-2 rounded-lg text-sm border transition shadow-md ${theme==='dark'?'border-slate-700 bg-slate-800 hover:bg-slate-700':'border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700'} focus-ring`} title="Alternar tema">
                   <span className="material-icons-round text-lg">{theme==='dark'?'light_mode':'dark_mode'}</span>
@@ -270,6 +546,12 @@
                 <button onClick={()=>setAnchor(startOfWeek(new Date()))} className="px-3 py-1.5 rounded-lg text-sm border border-cyan-600 bg-cyan-800/30 text-cyan-300 hover:bg-cyan-800/40 transition shadow-md focus-ring">Hoje</button>
                 <button onClick={()=>setAnchor(d=>addDays(d,7))} className={`p-2 rounded-lg text-sm border ${themeClasses.cardBorder} ${themeClasses.inputBg} ${themeClasses.text} ${theme==='dark'?'hover:bg-slate-700':'hover:bg-slate-200'} transition shadow-md focus-ring`}><span className="material-icons-round text-lg">chevron_right</span></button>
               </div>
+
+              {/* Botões do AuthUI (Visível em Mobile) */}
+              <div className="md:hidden flex items-center gap-2 mt-2 w-full justify-end">
+                <AuthUI supabase={supabase} user={user} themeClasses={themeClasses} toast={toast} />
+              </div>
+
             </div>
 
             <div className={`max-w-7xl mx-auto px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-300 ${headerCollapsed?'max-h-0 opacity-0 overflow-hidden':'max-h-[500px] opacity-100'}`}>
@@ -469,7 +751,7 @@
 
           <footer className="max-w-7xl mx-auto px-4 pb-6 mt-12 border-t border-slate-800/50">
             <div className={`mt-6 text-center text-xs ${themeClasses.neutral}`}>
-              * Salvamento local (localStorage) com debounce de 0.8s. Pressione <kbd>Ctrl/Cmd + K</kbd> para focar a busca ou <kbd>Ctrl/Cmd + N</kbd> para adicionar nova tarefa.
+              * Salvamento local com debounce de 0.8s. Cloud Sync Opcional via Supabase. Pressione <kbd>Ctrl/Cmd + K</kbd> para focar a busca ou <kbd>Ctrl/Cmd + N</kbd> para adicionar nova tarefa.
             </div>
           </footer>
 
